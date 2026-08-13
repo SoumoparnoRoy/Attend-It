@@ -1,0 +1,12 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    prefer_single_quotes: true
+    unawaited_futures: true
+    avoid_redundant_argument_values: false
+
+analyzer:
+  errors:
+    # Treat accidental context-after-await as an error rather than a hint.
+    use_build_context_synchronously: error

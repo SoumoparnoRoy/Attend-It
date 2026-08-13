@@ -1,0 +1,280 @@
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../core/date_utils.dart';
+
+/// Which theme the app renders in.
+///
+/// Persisted by `name` rather than index so reordering or inserting a value
+/// here can never silently repoint an existing user's choice at a different
+/// theme.
+enum AppThemeMode {
+  system,
+  light,
+  dark;
+
+  static AppThemeMode fromName(String? name) {
+    for (final AppThemeMode mode in AppThemeMode.values) {
+      if (mode.name == name) return mode;
+    }
+    return AppThemeMode.dark;
+  }
+
+  String get label => switch (this) {
+        AppThemeMode.system => 'Match system',
+        AppThemeMode.light => 'Light',
+        AppThemeMode.dark => 'Dark',
+      };
+}
+
+/// User preferences: semester bounds, attendance target and notification
+/// choices. Small scalar values, so they live in SharedPreferences rather than
+/// the database.
+@immutable
+class AppSettings {
+  const AppSettings({
+    this.semesterStart,
+    this.semesterEnd,
+    this.targetPercent = 75,
+    this.defaultClassDurationMinutes = 60,
+    this.use24HourTime = false,
+    this.themeMode = AppThemeMode.dark,
+    this.notificationsEnabled = true,
+    this.inAppAlerts = true,
+    this.notifyBeforeClass = true,
+    this.notifyLeadMinutes = 15,
+    this.notifyEveningReminder = true,
+    this.eveningReminderMinutes = 20 * 60,
+    this.notifyAttendanceDanger = true,
+    this.onboarded = false,
+  });
+
+  final DateTime? semesterStart;
+  final DateTime? semesterEnd;
+
+  /// Global requirement, e.g. 75. Subjects may override this.
+  final double targetPercent;
+
+  /// Fallback class length, used when a subject has no category. Picking a
+  /// start time fills the end time in from this.
+  final int defaultClassDurationMinutes;
+
+  final bool use24HourTime;
+
+  /// The app has always been dark-first, so an existing install keeps that
+  /// look after updating; light and system are opt-in.
+  final AppThemeMode themeMode;
+
+  /// Master switch. When false nothing is posted to the system tray at all,
+  /// whatever the three per-type flags below say — those keep their values so
+  /// switching back on restores the previous choices rather than resetting
+  /// them.
+  final bool notificationsEnabled;
+
+  /// Surface alerts inside the app when the system notification for them is
+  /// switched off. This is what stops "notifications off" from also meaning
+  /// "never tell me I am about to drop below target".
+  final bool inAppAlerts;
+
+  final bool notifyBeforeClass;
+  final int notifyLeadMinutes;
+
+  final bool notifyEveningReminder;
+
+  /// Minutes since midnight for the evening "mark your attendance" nudge.
+  final int eveningReminderMinutes;
+
+  final bool notifyAttendanceDanger;
+
+  final bool onboarded;
+
+  double get targetRatio => targetPercent / 100.0;
+
+  /// A type only reaches the system tray when the master switch and its own
+  /// flag are both on.
+  bool get classRemindersActive => notificationsEnabled && notifyBeforeClass;
+  bool get eveningReminderActive =>
+      notificationsEnabled && notifyEveningReminder;
+  bool get dangerAlertsActive =>
+      notificationsEnabled && notifyAttendanceDanger;
+
+  /// Attendance warnings are not reaching the tray, so the app shows them
+  /// itself instead of dropping them silently.
+  bool get showDangerInApp => inAppAlerts && !dangerAlertsActive;
+
+  bool get hasSemester => semesterStart != null && semesterEnd != null;
+
+  /// How far through the term you are, 0..1.
+  double get semesterProgress {
+    if (!hasSemester) return 0;
+    final int total = Dates.daysBetween(semesterStart!, semesterEnd!);
+    if (total <= 0) return 1;
+    final int done = Dates.daysBetween(semesterStart!, Dates.today());
+    return (done / total).clamp(0.0, 1.0);
+  }
+
+  int get daysLeftInSemester {
+    if (semesterEnd == null) return 0;
+    final int days = Dates.daysBetween(Dates.today(), semesterEnd!);
+    return days < 0 ? 0 : days;
+  }
+
+  AppSettings copyWith({
+    DateTime? semesterStart,
+    DateTime? semesterEnd,
+    double? targetPercent,
+    int? defaultClassDurationMinutes,
+    bool? use24HourTime,
+    AppThemeMode? themeMode,
+    bool? notificationsEnabled,
+    bool? inAppAlerts,
+    bool? notifyBeforeClass,
+    int? notifyLeadMinutes,
+    bool? notifyEveningReminder,
+    int? eveningReminderMinutes,
+    bool? notifyAttendanceDanger,
+    bool? onboarded,
+  }) {
+    return AppSettings(
+      semesterStart: semesterStart ?? this.semesterStart,
+      semesterEnd: semesterEnd ?? this.semesterEnd,
+      targetPercent: targetPercent ?? this.targetPercent,
+      defaultClassDurationMinutes:
+          defaultClassDurationMinutes ?? this.defaultClassDurationMinutes,
+      use24HourTime: use24HourTime ?? this.use24HourTime,
+      themeMode: themeMode ?? this.themeMode,
+      notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
+      inAppAlerts: inAppAlerts ?? this.inAppAlerts,
+      notifyBeforeClass: notifyBeforeClass ?? this.notifyBeforeClass,
+      notifyLeadMinutes: notifyLeadMinutes ?? this.notifyLeadMinutes,
+      notifyEveningReminder:
+          notifyEveningReminder ?? this.notifyEveningReminder,
+      eveningReminderMinutes:
+          eveningReminderMinutes ?? this.eveningReminderMinutes,
+      notifyAttendanceDanger:
+          notifyAttendanceDanger ?? this.notifyAttendanceDanger,
+      onboarded: onboarded ?? this.onboarded,
+    );
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'semesterStart':
+            semesterStart == null ? null : Dates.keyOf(semesterStart!),
+        'semesterEnd': semesterEnd == null ? null : Dates.keyOf(semesterEnd!),
+        'targetPercent': targetPercent,
+        'defaultClassDurationMinutes': defaultClassDurationMinutes,
+        'use24HourTime': use24HourTime,
+        'themeMode': themeMode.name,
+        'notificationsEnabled': notificationsEnabled,
+        'inAppAlerts': inAppAlerts,
+        'notifyBeforeClass': notifyBeforeClass,
+        'notifyLeadMinutes': notifyLeadMinutes,
+        'notifyEveningReminder': notifyEveningReminder,
+        'eveningReminderMinutes': eveningReminderMinutes,
+        'notifyAttendanceDanger': notifyAttendanceDanger,
+      };
+
+  factory AppSettings.fromJson(Map<String, Object?> json) {
+    final int? start = (json['semesterStart'] as num?)?.toInt();
+    final int? end = (json['semesterEnd'] as num?)?.toInt();
+    return AppSettings(
+      semesterStart: start == null ? null : Dates.fromKey(start),
+      semesterEnd: end == null ? null : Dates.fromKey(end),
+      targetPercent: (json['targetPercent'] as num?)?.toDouble() ?? 75,
+      defaultClassDurationMinutes:
+          (json['defaultClassDurationMinutes'] as num?)?.toInt() ?? 60,
+      use24HourTime: json['use24HourTime'] as bool? ?? false,
+      themeMode: AppThemeMode.fromName(json['themeMode'] as String?),
+      // Backups written before these existed default to "on", which matches
+      // how the app behaved when that backup was taken.
+      notificationsEnabled: json['notificationsEnabled'] as bool? ?? true,
+      inAppAlerts: json['inAppAlerts'] as bool? ?? true,
+      notifyBeforeClass: json['notifyBeforeClass'] as bool? ?? true,
+      notifyLeadMinutes: (json['notifyLeadMinutes'] as num?)?.toInt() ?? 15,
+      notifyEveningReminder: json['notifyEveningReminder'] as bool? ?? true,
+      eveningReminderMinutes:
+          (json['eveningReminderMinutes'] as num?)?.toInt() ?? 20 * 60,
+      notifyAttendanceDanger: json['notifyAttendanceDanger'] as bool? ?? true,
+      onboarded: true,
+    );
+  }
+}
+
+/// Reads and writes [AppSettings]. Keys are namespaced so a future feature can
+/// share the same preference store without collisions.
+class SettingsService {
+  static const String _kSemesterStart = 'ut.semesterStart';
+  static const String _kSemesterEnd = 'ut.semesterEnd';
+  static const String _kTarget = 'ut.targetPercent';
+  static const String _kDefaultDuration = 'ut.defaultClassDurationMinutes';
+  static const String _k24h = 'ut.use24HourTime';
+  static const String _kThemeMode = 'ut.themeMode';
+  static const String _kNotificationsEnabled = 'ut.notificationsEnabled';
+  static const String _kInAppAlerts = 'ut.inAppAlerts';
+  static const String _kNotifyBefore = 'ut.notifyBeforeClass';
+  static const String _kLead = 'ut.notifyLeadMinutes';
+  static const String _kNotifyEvening = 'ut.notifyEveningReminder';
+  static const String _kEveningMinutes = 'ut.eveningReminderMinutes';
+  static const String _kNotifyDanger = 'ut.notifyAttendanceDanger';
+  static const String _kOnboarded = 'ut.onboarded';
+
+  /// The modern, cache-free preferences API. `SharedPreferences.getInstance()`
+  /// is a legacy surface that the plugin has flagged for deprecation.
+  final SharedPreferencesAsync _prefs = SharedPreferencesAsync();
+
+  Future<AppSettings> load() async {
+    final SharedPreferencesAsync prefs = _prefs;
+    final int? start = await prefs.getInt(_kSemesterStart);
+    final int? end = await prefs.getInt(_kSemesterEnd);
+    return AppSettings(
+      semesterStart: start == null ? null : Dates.fromKey(start),
+      semesterEnd: end == null ? null : Dates.fromKey(end),
+      targetPercent: await prefs.getDouble(_kTarget) ?? 75,
+      defaultClassDurationMinutes:
+          await prefs.getInt(_kDefaultDuration) ?? 60,
+      use24HourTime: await prefs.getBool(_k24h) ?? false,
+      themeMode: AppThemeMode.fromName(await prefs.getString(_kThemeMode)),
+      notificationsEnabled:
+          await prefs.getBool(_kNotificationsEnabled) ?? true,
+      inAppAlerts: await prefs.getBool(_kInAppAlerts) ?? true,
+      notifyBeforeClass: await prefs.getBool(_kNotifyBefore) ?? true,
+      notifyLeadMinutes: await prefs.getInt(_kLead) ?? 15,
+      notifyEveningReminder: await prefs.getBool(_kNotifyEvening) ?? true,
+      eveningReminderMinutes: await prefs.getInt(_kEveningMinutes) ?? 20 * 60,
+      notifyAttendanceDanger: await prefs.getBool(_kNotifyDanger) ?? true,
+      onboarded: await prefs.getBool(_kOnboarded) ?? false,
+    );
+  }
+
+  Future<void> save(AppSettings settings) async {
+    final SharedPreferencesAsync prefs = _prefs;
+    if (settings.semesterStart == null) {
+      await prefs.remove(_kSemesterStart);
+    } else {
+      await prefs.setInt(_kSemesterStart, Dates.keyOf(settings.semesterStart!));
+    }
+    if (settings.semesterEnd == null) {
+      await prefs.remove(_kSemesterEnd);
+    } else {
+      await prefs.setInt(_kSemesterEnd, Dates.keyOf(settings.semesterEnd!));
+    }
+    await prefs.setDouble(_kTarget, settings.targetPercent);
+    await prefs.setInt(
+      _kDefaultDuration,
+      settings.defaultClassDurationMinutes,
+    );
+    await prefs.setBool(_k24h, settings.use24HourTime);
+    await prefs.setString(_kThemeMode, settings.themeMode.name);
+    await prefs.setBool(
+      _kNotificationsEnabled,
+      settings.notificationsEnabled,
+    );
+    await prefs.setBool(_kInAppAlerts, settings.inAppAlerts);
+    await prefs.setBool(_kNotifyBefore, settings.notifyBeforeClass);
+    await prefs.setInt(_kLead, settings.notifyLeadMinutes);
+    await prefs.setBool(_kNotifyEvening, settings.notifyEveningReminder);
+    await prefs.setInt(_kEveningMinutes, settings.eveningReminderMinutes);
+    await prefs.setBool(_kNotifyDanger, settings.notifyAttendanceDanger);
+    await prefs.setBool(_kOnboarded, settings.onboarded);
+  }
+}

@@ -1,0 +1,630 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../core/date_utils.dart';
+import '../data/db/attend_it_repository.dart';
+import '../data/models/attendance_record.dart';
+import '../data/models/attendance_status.dart';
+import '../data/models/class_category.dart';
+import '../data/models/class_session.dart';
+import '../data/models/class_slot.dart';
+import '../data/models/extra_class.dart';
+import '../data/models/holiday.dart';
+import '../data/models/subject.dart';
+import '../data/settings/app_settings.dart';
+import '../domain/attendance_log.dart';
+import '../domain/attendance_stats.dart';
+import '../domain/schedule_engine.dart';
+import '../services/backup_service.dart';
+import '../services/notification_service.dart';
+
+// ---------------------------------------------------------------- singletons
+
+final repositoryProvider = Provider<AttendItRepository>(
+  (ref) => AttendItRepository(),
+);
+
+final settingsServiceProvider = Provider<SettingsService>(
+  (ref) => SettingsService(),
+);
+
+final backupServiceProvider = Provider<BackupService>(
+  (ref) => BackupService(
+    ref.watch(repositoryProvider),
+    ref.watch(settingsServiceProvider),
+  ),
+);
+
+// ----------------------------------------------------------------- settings
+
+/// Loads and mutates [AppSettings]. Every write persists immediately so the
+/// app can be killed at any moment without losing a preference.
+class SettingsController extends AsyncNotifier<AppSettings> {
+  @override
+  Future<AppSettings> build() async {
+    return ref.watch(settingsServiceProvider).load();
+  }
+
+  Future<void> save(AppSettings settings) async {
+    state = AsyncValue<AppSettings>.data(settings);
+    await ref.read(settingsServiceProvider).save(settings);
+  }
+
+  Future<void> setSemester(DateTime start, DateTime end) async {
+    final AppSettings? current = state.value;
+    if (current == null) return;
+    await save(
+      current.copyWith(
+        semesterStart: Dates.dayOf(start),
+        semesterEnd: Dates.dayOf(end),
+        onboarded: true,
+      ),
+    );
+  }
+
+  Future<void> setTarget(double percent) async {
+    final AppSettings? current = state.value;
+    if (current == null) return;
+    await save(current.copyWith(targetPercent: percent.clamp(0, 100)));
+  }
+}
+
+final settingsProvider =
+    AsyncNotifierProvider<SettingsController, AppSettings>(
+  SettingsController.new,
+);
+
+// --------------------------------------------------------------- timetable
+
+/// Everything the schedule engine needs, loaded in one round trip.
+class TimetableData {
+  const TimetableData({
+    required this.categories,
+    required this.subjects,
+    required this.slots,
+    required this.extras,
+    required this.holidays,
+    required this.records,
+  });
+
+  final List<ClassCategory> categories;
+  final List<Subject> subjects;
+  final List<ClassSlot> slots;
+  final List<ExtraClass> extras;
+  final List<Holiday> holidays;
+  final List<AttendanceRecord> records;
+
+  bool get isEmpty => subjects.isEmpty;
+
+  ClassCategory? categoryFor(Subject? subject) {
+    final int? id = subject?.categoryId;
+    if (id == null) return null;
+    for (final ClassCategory category in categories) {
+      if (category.id == id) return category;
+    }
+    return null;
+  }
+
+  ClassCategory? categoryById(int? id) {
+    if (id == null) return null;
+    for (final ClassCategory category in categories) {
+      if (category.id == id) return category;
+    }
+    return null;
+  }
+
+  Subject? subjectById(int? id) {
+    if (id == null) return null;
+    for (final Subject subject in subjects) {
+      if (subject.id == id) return subject;
+    }
+    return null;
+  }
+}
+
+/// Reads the whole timetable. Datasets here are small — a semester is a few
+/// hundred rows at most — so loading it once and deriving everything in memory
+/// is both simpler and faster than querying per screen.
+final timetableProvider = FutureProvider<TimetableData>((ref) async {
+  final AttendItRepository repo = ref.watch(repositoryProvider);
+  final List<ClassCategory> categories = await repo.getCategories();
+  final List<Subject> subjects = await repo.getSubjects();
+  final List<ClassSlot> slots = await repo.getSlots();
+  final List<ExtraClass> extras = await repo.getExtraClasses();
+  final List<Holiday> holidays = await repo.getHolidays();
+  final List<AttendanceRecord> records = await repo.getAttendance();
+  return TimetableData(
+    categories: categories,
+    subjects: subjects,
+    slots: slots,
+    extras: extras,
+    holidays: holidays,
+    records: records,
+  );
+});
+
+/// The expansion engine, rebuilt whenever data or semester bounds change.
+final scheduleEngineProvider = Provider<ScheduleEngine?>((ref) {
+  final TimetableData? data = ref.watch(timetableProvider).value;
+  final AppSettings? settings = ref.watch(settingsProvider).value;
+  if (data == null) return null;
+  return ScheduleEngine(
+    subjects: data.subjects,
+    slots: data.slots,
+    extras: data.extras,
+    holidays: data.holidays,
+    records: data.records,
+    semesterStart: settings?.semesterStart,
+    semesterEnd: settings?.semesterEnd,
+  );
+});
+
+/// The day currently shown on the Today screen.
+final selectedDateProvider =
+    NotifierProvider<SelectedDateController, DateTime>(
+  SelectedDateController.new,
+);
+
+class SelectedDateController extends Notifier<DateTime> {
+  @override
+  DateTime build() => Dates.today();
+
+  void select(DateTime date) => state = Dates.dayOf(date);
+
+  void goToToday() => state = Dates.today();
+
+  void shiftDays(int days) => state = Dates.addDays(state, days);
+}
+
+/// Classes on the currently selected day.
+final selectedDaySessionsProvider = Provider<List<ClassSession>>((ref) {
+  final ScheduleEngine? engine = ref.watch(scheduleEngineProvider);
+  final DateTime date = ref.watch(selectedDateProvider);
+  if (engine == null) return const <ClassSession>[];
+  return engine.sessionsOn(date);
+});
+
+/// Past classes you have not marked yet.
+final unmarkedSessionsProvider = Provider<List<ClassSession>>((ref) {
+  final ScheduleEngine? engine = ref.watch(scheduleEngineProvider);
+  if (engine == null) return const <ClassSession>[];
+  return engine.unmarkedSessions();
+});
+
+final nextSessionProvider = Provider<ClassSession?>((ref) {
+  final ScheduleEngine? engine = ref.watch(scheduleEngineProvider);
+  return engine?.nextSession();
+});
+
+/// The week shown on the timetable screen, keyed by its Monday.
+final visibleWeekProvider =
+    NotifierProvider<VisibleWeekController, DateTime>(
+  VisibleWeekController.new,
+);
+
+class VisibleWeekController extends Notifier<DateTime> {
+  @override
+  DateTime build() => Dates.startOfWeek(Dates.today());
+
+  void shiftWeeks(int weeks) => state = Dates.addDays(state, weeks * 7);
+
+  void goToThisWeek() => state = Dates.startOfWeek(Dates.today());
+}
+
+// ------------------------------------------------------------------- stats
+
+/// Attendance figures for every subject, plus the aggregate.
+final statsProvider = Provider<OverallStats>((ref) {
+  final TimetableData? data = ref.watch(timetableProvider).value;
+  final AppSettings? settings = ref.watch(settingsProvider).value;
+  final ScheduleEngine? engine = ref.watch(scheduleEngineProvider);
+
+  final double globalTarget = (settings?.targetRatio ?? 0.75);
+  if (data == null) {
+    return OverallStats(subjects: const <SubjectStats>[], target: globalTarget);
+  }
+
+  // Count marks straight from the records — cheaper and more accurate than
+  // re-expanding the whole semester, since a mark survives rule edits.
+  final Map<int, Map<AttendanceStatus, int>> counts =
+      <int, Map<AttendanceStatus, int>>{};
+  for (final AttendanceRecord record in data.records) {
+    counts.putIfAbsent(record.subjectId, () => <AttendanceStatus, int>{});
+    counts[record.subjectId]![record.status] =
+        (counts[record.subjectId]![record.status] ?? 0) + 1;
+  }
+
+  final Map<int, int> remaining =
+      engine?.remainingSessionsBySubject() ?? <int, int>{};
+
+  final List<SubjectStats> subjectStats = <SubjectStats>[];
+  for (final Subject subject in data.subjects) {
+    final int? id = subject.id;
+    if (id == null) continue;
+    final Map<AttendanceStatus, int> byStatus =
+        counts[id] ?? const <AttendanceStatus, int>{};
+    subjectStats.add(
+      SubjectStats(
+        subject: subject,
+        present: byStatus[AttendanceStatus.present] ?? 0,
+        absent: byStatus[AttendanceStatus.absent] ?? 0,
+        cancelled: byStatus[AttendanceStatus.cancelled] ?? 0,
+        target: subject.targetPercent == null
+            ? globalTarget
+            : subject.targetPercent! / 100.0,
+        remainingPlanned: remaining[id] ?? 0,
+      ),
+    );
+  }
+
+  subjectStats.sort((SubjectStats a, SubjectStats b) {
+    // Struggling subjects float to the top; unmarked ones sink.
+    if (a.hasData != b.hasData) return a.hasData ? -1 : 1;
+    return a.ratio.compareTo(b.ratio);
+  });
+
+  return OverallStats(subjects: subjectStats, target: globalTarget);
+});
+
+/// Stats for one subject, looked up from [statsProvider] by id.
+final subjectStatsProvider =
+    Provider.family<SubjectStats?, int>((ref, int subjectId) {
+  final OverallStats stats = ref.watch(statsProvider);
+  for (final SubjectStats s in stats.subjects) {
+    if (s.subject.id == subjectId) return s;
+  }
+  return null;
+});
+
+// ---------------------------------------------------------- attendance log
+
+/// Furthest back the log will look.
+///
+/// [ScheduleEngine.sessionsBetween] caps expansion at 400 days *from its start
+/// date*, so an unclamped range would silently drop the newest days rather than
+/// the oldest — the opposite of what anyone wants here.
+const int _maxLogDays = 400;
+
+/// One subject's full attendance history, newest first.
+///
+/// Expanding the term day by day costs the same as the stats already pay, and a
+/// term is a few hundred days, so this stays cheap. `family` caches per subject
+/// and recomputes only when the timetable or semester bounds change.
+final attendanceLogProvider =
+    Provider.family<List<AttendanceLogEntry>, int>((ref, int subjectId) {
+  final ScheduleEngine? engine = ref.watch(scheduleEngineProvider);
+  final TimetableData? data = ref.watch(timetableProvider).value;
+  if (engine == null || data == null) return const <AttendanceLogEntry>[];
+
+  final DateTime today = Dates.today();
+  final DateTime earliest = Dates.addDays(today, -_maxLogDays);
+
+  // Start at the semester opening, but stretch back far enough to include any
+  // mark that predates it — a mark outside the term still counts, so it has to
+  // be reachable and correctable.
+  DateTime from = engine.semesterStart ?? today;
+  for (final AttendanceRecord record in data.records) {
+    if (record.subjectId != subjectId) continue;
+    if (record.date.isBefore(from)) from = Dates.dayOf(record.date);
+  }
+  if (from.isBefore(earliest)) from = earliest;
+  if (from.isAfter(today)) from = today;
+
+  final List<ClassSession> past = engine
+      .sessionsBetween(from, today)
+      .where((ClassSession s) => s.subject.id == subjectId)
+      .toList();
+
+  return buildAttendanceLog(
+    subjectId: subjectId,
+    pastSessions: past,
+    records: data.records,
+  );
+});
+
+// ------------------------------------------------------------ in-app alerts
+
+/// Subjects the app has to warn about itself, because their system
+/// notification is switched off and in-app alerts are on. Empty whenever the
+/// tray is already handling it, so the two can never both fire.
+final inAppAlertsProvider = Provider<List<SubjectStats>>((ref) {
+  final AppSettings? settings = ref.watch(settingsProvider).value;
+  if (settings == null || !settings.showDangerInApp) {
+    return const <SubjectStats>[];
+  }
+  return NotificationService.subjectsInDanger(ref.watch(statsProvider));
+});
+
+/// Subjects already shown in a popup, so opening the app or marking another
+/// class does not re-raise a warning you have just dismissed. A subject that
+/// recovers and slips again is announced afresh.
+class AnnouncedAlertsController extends Notifier<Set<int>> {
+  @override
+  Set<int> build() => <int>{};
+
+  /// The subjects in [alerts] that have not been announced yet.
+  List<SubjectStats> pending(List<SubjectStats> alerts) {
+    return alerts
+        .where((SubjectStats s) => !state.contains(s.subject.id))
+        .toList();
+  }
+
+  void markAnnounced(Iterable<SubjectStats> alerts) {
+    final Set<int> ids = <int>{
+      for (final SubjectStats s in alerts)
+        if (s.subject.id != null) s.subject.id!,
+    };
+    if (ids.isEmpty) return;
+    state = <int>{...state, ...ids};
+  }
+
+  /// Drops subjects that are no longer in danger so they can warn again later.
+  void retainOnly(Iterable<SubjectStats> alerts) {
+    final Set<int> live = <int>{
+      for (final SubjectStats s in alerts)
+        if (s.subject.id != null) s.subject.id!,
+    };
+    final Set<int> kept = state.intersection(live);
+    if (kept.length != state.length) state = kept;
+  }
+}
+
+final announcedAlertsProvider =
+    NotifierProvider<AnnouncedAlertsController, Set<int>>(
+  AnnouncedAlertsController.new,
+);
+
+/// Resolves the default length of a class for a given subject:
+/// the subject's category first, then the global setting.
+///
+/// This is what lets picking a start time fill in the end time — a Lab gets
+/// two hours where a Theory class gets one, without asking every time.
+final defaultDurationProvider =
+    Provider.family<int, int?>((ref, int? subjectId) {
+  final int fallback =
+      ref.watch(settingsProvider).value?.defaultClassDurationMinutes ?? 60;
+  final TimetableData? data = ref.watch(timetableProvider).value;
+  if (data == null || subjectId == null) return fallback;
+  final ClassCategory? category =
+      data.categoryFor(data.subjectById(subjectId));
+  return category?.defaultDurationMinutes ?? fallback;
+});
+
+// ------------------------------------------------------------------ actions
+
+/// Every mutation the UI can perform. Each one writes to the database and then
+/// invalidates [timetableProvider], which cascades a rebuild through the
+/// engine, the day lists and the stats in a single pass.
+class TimetableActions {
+  TimetableActions(this._ref);
+
+  final Ref _ref;
+
+  AttendItRepository get _repo => _ref.read(repositoryProvider);
+
+  Future<void> _refresh() async {
+    _ref.invalidate(timetableProvider);
+    await _ref.read(timetableProvider.future);
+    await _syncNotifications();
+  }
+
+  Future<void> _syncNotifications() async {
+    final AppSettings? settings = _ref.read(settingsProvider).value;
+    final ScheduleEngine? engine = _ref.read(scheduleEngineProvider);
+    if (settings == null || engine == null) return;
+    await NotificationService.instance.rescheduleAll(
+      settings: settings,
+      upcoming: engine.upcomingSessions(),
+      stats: _ref.read(statsProvider),
+    );
+  }
+
+  // categories -------------------------------------------------------------
+
+  Future<int> addCategory(ClassCategory category) async {
+    final int id = await _repo.insertCategory(category);
+    await _refresh();
+    return id;
+  }
+
+  Future<void> updateCategory(ClassCategory category) async {
+    await _repo.updateCategory(category);
+    await _refresh();
+  }
+
+  /// Subjects in a deleted category keep all their data and fall back to the
+  /// global default class length.
+  Future<void> deleteCategory(int id) async {
+    await _repo.deleteCategory(id);
+    await _refresh();
+  }
+
+  Future<int> countSubjectsInCategory(int id) =>
+      _repo.countSubjectsInCategory(id);
+
+  // subjects ---------------------------------------------------------------
+
+  Future<int> addSubject(Subject subject) async {
+    final int id = await _repo.insertSubject(subject);
+    await _refresh();
+    return id;
+  }
+
+  Future<void> updateSubject(Subject subject) async {
+    await _repo.updateSubject(subject);
+    await _refresh();
+  }
+
+  Future<void> deleteSubject(int id) async {
+    await _repo.deleteSubject(id);
+    await _refresh();
+  }
+
+  // recurring slots --------------------------------------------------------
+
+  Future<void> addSlot(ClassSlot slot) async {
+    await _repo.insertSlot(slot);
+    await _refresh();
+  }
+
+  Future<void> updateSlot(ClassSlot slot) async {
+    await _repo.updateSlot(slot);
+    await _refresh();
+  }
+
+  /// Deletes the rule and every future week it would have produced.
+  ///
+  /// Attendance already marked against it survives: marks are keyed by
+  /// `(subject, date, start time)` and have no relationship to `class_slots`,
+  /// so they keep counting and stay reachable in the subject's attendance log,
+  /// flagged as orphaned.
+  Future<void> deleteSlot(int id) async {
+    await _repo.deleteSlot(id);
+    await _refresh();
+  }
+
+  /// Keeps history intact but stops the class recurring from [date] on.
+  Future<void> endSlotFrom(int slotId, DateTime date) async {
+    await _repo.endSlotBefore(slotId, date);
+    await _refresh();
+  }
+
+  // one-off classes --------------------------------------------------------
+
+  Future<void> addExtraClass(ExtraClass extra) async {
+    await _repo.insertExtraClass(extra);
+    await _refresh();
+  }
+
+  Future<void> deleteExtraClass(int id) async {
+    await _repo.deleteExtraClass(id);
+    await _refresh();
+  }
+
+  // attendance -------------------------------------------------------------
+
+  /// Marks one occurrence. Tapping the status it already has clears the mark,
+  /// which makes the Today screen fully reversible with a single gesture.
+  Future<void> mark(ClassSession session, AttendanceStatus status) async {
+    final int? subjectId = session.subject.id;
+    if (subjectId == null) return;
+    await setStatusAt(
+      subjectId: subjectId,
+      date: session.date,
+      startMinutes: session.startMinutes,
+      current: session.status,
+      status: status,
+    );
+  }
+
+  /// The same toggle rule addressed by natural key instead of by session.
+  ///
+  /// The attendance log needs this: a mark left behind by a deleted rule has no
+  /// [ClassSession] to pass, but must still be correctable. Keeping one
+  /// implementation means the "tap the current status to clear it" behaviour
+  /// cannot drift between the two screens.
+  Future<void> setStatusAt({
+    required int subjectId,
+    required DateTime date,
+    required int startMinutes,
+    required AttendanceStatus? current,
+    required AttendanceStatus status,
+  }) async {
+    if (current == status) {
+      await clearStatusAt(
+        subjectId: subjectId,
+        date: date,
+        startMinutes: startMinutes,
+      );
+      return;
+    }
+    await _repo.setAttendance(
+      AttendanceRecord(
+        subjectId: subjectId,
+        date: date,
+        startMinutes: startMinutes,
+        status: status,
+        markedAt: DateTime.now(),
+      ),
+    );
+    await _refresh();
+  }
+
+  /// Removes a mark outright, by natural key.
+  ///
+  /// The attendance log offers this explicitly for a mark whose weekly class
+  /// has been deleted: clearing it by tapping its own status again works, but
+  /// is not something anyone would guess at for a row they did not create.
+  Future<void> clearStatusAt({
+    required int subjectId,
+    required DateTime date,
+    required int startMinutes,
+  }) async {
+    await _repo.clearAttendance(subjectId, date, startMinutes);
+    await _refresh();
+  }
+
+  /// [clearStatusAt] addressed by session rather than by natural key.
+  Future<void> clearMark(ClassSession session) async {
+    final int? subjectId = session.subject.id;
+    if (subjectId == null) return;
+    await clearStatusAt(
+      subjectId: subjectId,
+      date: session.date,
+      startMinutes: session.startMinutes,
+    );
+  }
+
+  /// Marks every unmarked class in [sessions] with [status] in one batch.
+  Future<int> markAll(
+    List<ClassSession> sessions,
+    AttendanceStatus status,
+  ) async {
+    final List<AttendanceRecord> records = <AttendanceRecord>[];
+    for (final ClassSession session in sessions) {
+      final int? subjectId = session.subject.id;
+      if (subjectId == null || session.isMarked) continue;
+      records.add(
+        AttendanceRecord(
+          subjectId: subjectId,
+          date: session.date,
+          startMinutes: session.startMinutes,
+          status: status,
+          markedAt: DateTime.now(),
+        ),
+      );
+    }
+    if (records.isEmpty) return 0;
+    await _repo.setManyAttendance(records);
+    await _refresh();
+    return records.length;
+  }
+
+  // holidays ---------------------------------------------------------------
+
+  Future<void> addHoliday(Holiday holiday) async {
+    await _repo.insertHoliday(holiday);
+    await _refresh();
+  }
+
+  Future<void> deleteHoliday(int id) async {
+    await _repo.deleteHoliday(id);
+    await _refresh();
+  }
+
+  // admin ------------------------------------------------------------------
+
+  Future<void> resetEverything() async {
+    await _repo.clearAll();
+    await NotificationService.instance.cancelAll();
+    await _refresh();
+  }
+
+  Future<void> reloadAfterImport() async {
+    _ref.invalidate(settingsProvider);
+    await _refresh();
+  }
+}
+
+final actionsProvider = Provider<TimetableActions>(
+  (ref) => TimetableActions(ref),
+);

@@ -1,0 +1,171 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:attend_it/core/app_theme.dart';
+import 'package:attend_it/core/date_utils.dart';
+import 'package:attend_it/data/models/attendance_record.dart';
+import 'package:attend_it/data/models/attendance_status.dart';
+import 'package:attend_it/data/models/class_category.dart';
+import 'package:attend_it/data/models/class_slot.dart';
+import 'package:attend_it/data/models/extra_class.dart';
+import 'package:attend_it/data/models/holiday.dart';
+import 'package:attend_it/data/models/subject.dart';
+import 'package:attend_it/data/settings/app_settings.dart';
+import 'package:attend_it/features/subjects/subjects_screen.dart';
+import 'package:attend_it/state/providers.dart';
+
+/// Serves fixed settings so the screen never reaches SharedPreferences.
+class _StaticSettings extends SettingsController {
+  @override
+  Future<AppSettings> build() async => const AppSettings(onboarded: true);
+}
+
+/// Physics: a code, a category, 2 weekly classes, 1 one-off and 4 marks
+/// (3 present of 4 held = 75%). Maths: bare, nothing recorded.
+TimetableData _fixture() {
+  final DateTime day = Dates.today();
+  return TimetableData(
+    categories: const <ClassCategory>[
+      ClassCategory(id: 1, name: 'Lab', defaultDurationMinutes: 120),
+    ],
+    subjects: const <Subject>[
+      Subject(
+        id: 2,
+        name: 'Mathematics',
+        colorValue: AppColors.defaultSubjectColor,
+      ),
+      Subject(
+        id: 1,
+        name: 'Physics',
+        code: 'PH101',
+        categoryId: 1,
+        colorValue: AppColors.defaultSubjectColor,
+      ),
+    ],
+    slots: <ClassSlot>[
+      ClassSlot(
+        id: 1,
+        subjectId: 1,
+        weekday: DateTime.monday,
+        startMinutes: 9 * 60,
+        endMinutes: 11 * 60,
+        startDate: day,
+      ),
+      ClassSlot(
+        id: 2,
+        subjectId: 1,
+        weekday: DateTime.wednesday,
+        startMinutes: 9 * 60,
+        endMinutes: 11 * 60,
+        startDate: day,
+      ),
+    ],
+    extras: <ExtraClass>[
+      ExtraClass(
+        id: 1,
+        subjectId: 1,
+        date: day,
+        startMinutes: 14 * 60,
+        endMinutes: 15 * 60,
+      ),
+    ],
+    holidays: const <Holiday>[],
+    records: <AttendanceRecord>[
+      for (int i = 0; i < 3; i++)
+        AttendanceRecord(
+          subjectId: 1,
+          date: Dates.addDays(day, -i),
+          startMinutes: 9 * 60,
+          status: AttendanceStatus.present,
+        ),
+      AttendanceRecord(
+        subjectId: 1,
+        date: Dates.addDays(day, -3),
+        startMinutes: 9 * 60,
+        status: AttendanceStatus.absent,
+      ),
+    ],
+  );
+}
+
+Widget _app(TimetableData data) {
+  return ProviderScope(
+    overrides: [
+      timetableProvider.overrideWith((Ref ref) async => data),
+      settingsProvider.overrideWith(_StaticSettings.new),
+    ],
+    child: MaterialApp(
+      theme: AppTheme.dark(),
+      home: const SubjectsScreen(),
+    ),
+  );
+}
+
+void main() {
+  testWidgets('lists every subject with its code, category and class count',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(_app(_fixture()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Subjects'), findsOneWidget);
+    expect(find.text('Physics'), findsOneWidget);
+    expect(find.text('Mathematics'), findsOneWidget);
+
+    // 2 weekly slots + 1 one-off = 3 classes.
+    expect(find.text('PH101 · Lab · 3 classes'), findsOneWidget);
+    // No code, no category, nothing scheduled.
+    expect(find.text('0 classes'), findsOneWidget);
+
+    expect(find.text('75%'), findsOneWidget); // 3 present of 4 held
+    expect(find.text('—'), findsOneWidget); // Mathematics, nothing marked
+    expect(find.text('Add subject'), findsOneWidget);
+  });
+
+  testWidgets('shows the empty state when there are no subjects',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      _app(
+        const TimetableData(
+          categories: <ClassCategory>[],
+          subjects: <Subject>[],
+          slots: <ClassSlot>[],
+          extras: <ExtraClass>[],
+          holidays: <Holiday>[],
+          records: <AttendanceRecord>[],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No subjects yet'), findsOneWidget);
+    expect(find.text('Add your first subject'), findsOneWidget);
+    // The FAB would duplicate the empty state's own call to action.
+    expect(find.text('Add subject'), findsNothing);
+  });
+
+  testWidgets('the delete dialog spells out exactly what is lost',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(_app(_fixture()));
+    await tester.pumpAndSettle();
+
+    // Physics sorts after Mathematics, so its menu is the second one.
+    await tester.tap(find.byIcon(Icons.more_vert_rounded).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Delete Physics?'), findsOneWidget);
+    expect(
+      find.textContaining(
+        'Physics has 2 weekly classes, 1 one-off class and 4 attendance marks.',
+      ),
+      findsOneWidget,
+    );
+
+    // Cancelling must not touch the data layer.
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Physics'), findsOneWidget);
+  });
+}
