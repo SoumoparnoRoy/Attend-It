@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/date_utils.dart';
+import '../../domain/day_grid.dart';
 
 /// Which theme the app renders in.
 ///
@@ -37,6 +38,9 @@ class AppSettings {
     this.semesterEnd,
     this.targetPercent = 75,
     this.defaultClassDurationMinutes = 60,
+    this.dayStartMinutes = 9 * 60,
+    this.dayEndMinutes = 17 * 60,
+    this.blockMinutes = 0,
     this.use24HourTime = false,
     this.themeMode = AppThemeMode.dark,
     this.notificationsEnabled = true,
@@ -58,6 +62,17 @@ class AppSettings {
   /// Fallback class length, used when a subject has no category. Picking a
   /// start time fills the end time in from this.
   final int defaultClassDurationMinutes;
+
+  /// The three numbers that describe a period-based day: when teaching starts,
+  /// when it ends, and how long one lecture block runs. Everything else about
+  /// the grid — how many blocks there are, where each one sits — is derived by
+  /// [DayGrid], so there is nothing to keep in sync.
+  ///
+  /// [blockMinutes] of 0 means the day has not been divided up, which is the
+  /// state every existing install starts in.
+  final int dayStartMinutes;
+  final int dayEndMinutes;
+  final int blockMinutes;
 
   final bool use24HourTime;
 
@@ -89,6 +104,12 @@ class AppSettings {
   final bool onboarded;
 
   double get targetRatio => targetPercent / 100.0;
+
+  DayGrid get dayGrid => DayGrid(
+        dayStartMinutes: dayStartMinutes,
+        dayEndMinutes: dayEndMinutes,
+        blockMinutes: blockMinutes,
+      );
 
   /// A type only reaches the system tray when the master switch and its own
   /// flag are both on.
@@ -124,6 +145,9 @@ class AppSettings {
     DateTime? semesterEnd,
     double? targetPercent,
     int? defaultClassDurationMinutes,
+    int? dayStartMinutes,
+    int? dayEndMinutes,
+    int? blockMinutes,
     bool? use24HourTime,
     AppThemeMode? themeMode,
     bool? notificationsEnabled,
@@ -141,6 +165,9 @@ class AppSettings {
       targetPercent: targetPercent ?? this.targetPercent,
       defaultClassDurationMinutes:
           defaultClassDurationMinutes ?? this.defaultClassDurationMinutes,
+      dayStartMinutes: dayStartMinutes ?? this.dayStartMinutes,
+      dayEndMinutes: dayEndMinutes ?? this.dayEndMinutes,
+      blockMinutes: blockMinutes ?? this.blockMinutes,
       use24HourTime: use24HourTime ?? this.use24HourTime,
       themeMode: themeMode ?? this.themeMode,
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
@@ -163,6 +190,9 @@ class AppSettings {
         'semesterEnd': semesterEnd == null ? null : Dates.keyOf(semesterEnd!),
         'targetPercent': targetPercent,
         'defaultClassDurationMinutes': defaultClassDurationMinutes,
+        'dayStartMinutes': dayStartMinutes,
+        'dayEndMinutes': dayEndMinutes,
+        'blockMinutes': blockMinutes,
         'use24HourTime': use24HourTime,
         'themeMode': themeMode.name,
         'notificationsEnabled': notificationsEnabled,
@@ -183,6 +213,11 @@ class AppSettings {
       targetPercent: (json['targetPercent'] as num?)?.toDouble() ?? 75,
       defaultClassDurationMinutes:
           (json['defaultClassDurationMinutes'] as num?)?.toInt() ?? 60,
+      // A backup taken before the day grid existed restores as "not divided
+      // up", which is how the app behaved when that backup was written.
+      dayStartMinutes: (json['dayStartMinutes'] as num?)?.toInt() ?? 9 * 60,
+      dayEndMinutes: (json['dayEndMinutes'] as num?)?.toInt() ?? 17 * 60,
+      blockMinutes: (json['blockMinutes'] as num?)?.toInt() ?? 0,
       use24HourTime: json['use24HourTime'] as bool? ?? false,
       themeMode: AppThemeMode.fromName(json['themeMode'] as String?),
       // Backups written before these existed default to "on", which matches
@@ -207,6 +242,9 @@ class SettingsService {
   static const String _kSemesterEnd = 'ut.semesterEnd';
   static const String _kTarget = 'ut.targetPercent';
   static const String _kDefaultDuration = 'ut.defaultClassDurationMinutes';
+  static const String _kDayStart = 'ut.dayStartMinutes';
+  static const String _kDayEnd = 'ut.dayEndMinutes';
+  static const String _kBlockMinutes = 'ut.blockMinutes';
   static const String _k24h = 'ut.use24HourTime';
   static const String _kThemeMode = 'ut.themeMode';
   static const String _kNotificationsEnabled = 'ut.notificationsEnabled';
@@ -232,6 +270,9 @@ class SettingsService {
       targetPercent: await prefs.getDouble(_kTarget) ?? 75,
       defaultClassDurationMinutes:
           await prefs.getInt(_kDefaultDuration) ?? 60,
+      dayStartMinutes: await prefs.getInt(_kDayStart) ?? 9 * 60,
+      dayEndMinutes: await prefs.getInt(_kDayEnd) ?? 17 * 60,
+      blockMinutes: await prefs.getInt(_kBlockMinutes) ?? 0,
       use24HourTime: await prefs.getBool(_k24h) ?? false,
       themeMode: AppThemeMode.fromName(await prefs.getString(_kThemeMode)),
       notificationsEnabled:
@@ -263,6 +304,9 @@ class SettingsService {
       _kDefaultDuration,
       settings.defaultClassDurationMinutes,
     );
+    await prefs.setInt(_kDayStart, settings.dayStartMinutes);
+    await prefs.setInt(_kDayEnd, settings.dayEndMinutes);
+    await prefs.setInt(_kBlockMinutes, settings.blockMinutes);
     await prefs.setBool(_k24h, settings.use24HourTime);
     await prefs.setString(_kThemeMode, settings.themeMode.name);
     await prefs.setBool(

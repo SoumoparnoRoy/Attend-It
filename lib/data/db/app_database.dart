@@ -11,7 +11,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const String fileName = 'attend_it.db';
-  static const int schemaVersion = 2;
+  static const int schemaVersion = 3;
 
   Database? _db;
 
@@ -43,6 +43,12 @@ class AppDatabase {
           );
           await _seedCategories(db);
         }
+        if (oldVersion < 3) {
+          // v3 added the saved room list. Nothing is seeded and no existing
+          // column changes: `class_slots.room` stays free text, so an install
+          // that never opens the new screen behaves exactly as before.
+          await db.execute(_roomsTable);
+        }
       },
     );
   }
@@ -54,6 +60,16 @@ class AppDatabase {
         name            TEXT    NOT NULL,
         default_minutes INTEGER NOT NULL,
         created_at      INTEGER NOT NULL
+      )
+    ''';
+
+  /// Same reasoning as [_categoriesTable]: shared by the create path and the
+  /// v3 migration so the two cannot drift.
+  static const String _roomsTable = '''
+      CREATE TABLE rooms (
+        id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        name     TEXT    NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0
       )
     ''';
 
@@ -79,6 +95,7 @@ class AppDatabase {
     final Batch batch = db.batch();
 
     batch.execute(_categoriesTable);
+    batch.execute(_roomsTable);
 
     batch.execute('''
       CREATE TABLE subjects (
@@ -175,6 +192,7 @@ class AppDatabase {
     batch.delete('holidays');
     batch.delete('subjects');
     batch.delete('categories');
+    batch.delete('rooms');
     await batch.commit(noResult: true);
   }
 }

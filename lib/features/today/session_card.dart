@@ -33,6 +33,7 @@ class SessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color subjectColor = session.subject.color;
+    final String? teacher = session.subject.teacher;
     final AttendanceStatus? status = session.status;
     final bool isCancelled = status == AttendanceStatus.cancelled;
     final bool dimmed = isCancelled;
@@ -120,6 +121,11 @@ class SessionCard extends StatelessWidget {
                                 _MetaItem(
                                   icon: Icons.place_outlined,
                                   text: session.room!,
+                                ),
+                              if (teacher != null && teacher.isNotEmpty)
+                                _MetaItem(
+                                  icon: Icons.person_outline_rounded,
+                                  text: teacher,
                                 ),
                               if (showDate)
                                 _MetaItem(

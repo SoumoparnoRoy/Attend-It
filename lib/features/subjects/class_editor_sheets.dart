@@ -8,7 +8,10 @@ import '../../data/models/class_category.dart';
 import '../../data/models/class_session.dart';
 import '../../data/models/class_slot.dart';
 import '../../data/models/extra_class.dart';
+import '../../data/models/room.dart';
 import '../../data/models/subject.dart';
+import '../../domain/class_clash.dart';
+import '../../domain/day_grid.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
 
@@ -597,6 +600,11 @@ class _CategoryFormState extends ConsumerState<_CategoryForm> {
 
   @override
   Widget build(BuildContext context) {
+    final DayGrid grid = ref.watch(dayGridProvider);
+    // Six blocks covers any single class anyone actually sits through, and the
+    // slider below still reaches anything unusual.
+    final int maxBlocks = grid.blockCount < 6 ? grid.blockCount : 6;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -610,17 +618,31 @@ class _CategoryFormState extends ConsumerState<_CategoryForm> {
           ),
         ),
         const SizedBox(height: AppSpacing.xl),
-        const SectionHeader('Default class length'),
+        SectionHeader(
+          grid.isConfigured ? 'How many blocks' : 'Default class length',
+        ),
         Wrap(
           spacing: AppSpacing.sm,
           runSpacing: AppSpacing.sm,
           children: <Widget>[
-            for (final int preset in _presets)
-              _DurationChip(
-                minutes: preset,
-                selected: preset == _minutes,
-                onTap: () => setState(() => _minutes = preset),
-              ),
+            // With a block length set, blocks are the unit that matters — a lab
+            // is "two lectures long", whatever a lecture happens to be.
+            if (grid.isConfigured)
+              for (int blocks = 1; blocks <= maxBlocks; blocks++)
+                _DurationChip(
+                  minutes: blocks * grid.blockMinutes,
+                  label: '$blocks ${blocks == 1 ? 'block' : 'blocks'}',
+                  selected: _minutes == blocks * grid.blockMinutes,
+                  onTap: () =>
+                      setState(() => _minutes = blocks * grid.blockMinutes),
+                )
+            else
+              for (final int preset in _presets)
+                _DurationChip(
+                  minutes: preset,
+                  selected: preset == _minutes,
+                  onTap: () => setState(() => _minutes = preset),
+                ),
           ],
         ),
         const SizedBox(height: AppSpacing.md),
@@ -653,8 +675,14 @@ class _CategoryFormState extends ConsumerState<_CategoryForm> {
         ),
         const SizedBox(height: AppSpacing.sm),
         Text(
-          'Picking a start time for a class in this category fills the end '
-          'time in automatically.',
+          grid.isConfigured && !grid.isWholeBlocks(_minutes)
+              // Silently rounding would move a length the user chose on
+              // purpose, so it is reported instead.
+              ? '${Clock.formatDuration(_minutes)} is not a whole number of '
+                  '${Clock.formatDuration(grid.blockMinutes)} blocks, so this '
+                  'category will not line up with the grid.'
+              : 'Picking a start time for a class in this category fills the '
+                  'end time in automatically.',
           style: TextStyle(
             fontSize: 12,
             height: 1.4,
@@ -685,11 +713,15 @@ class _DurationChip extends StatelessWidget {
     required this.minutes,
     required this.selected,
     required this.onTap,
+    this.label,
   });
 
   final int minutes;
   final bool selected;
   final VoidCallback onTap;
+
+  /// Shown instead of the raw length, so the same chip can read "2 blocks".
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
@@ -712,7 +744,7 @@ class _DurationChip extends StatelessWidget {
             ),
           ),
           child: Text(
-            Clock.formatDuration(minutes),
+            label ?? Clock.formatDuration(minutes),
             style: TextStyle(
               fontSize: 13,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
@@ -1005,8 +1037,8 @@ class _SlotFormState extends ConsumerState<_SlotForm> {
       }
     }
 
-    final List<ClassSlot> existing =
-        ref.read(timetableProvider).value?.slots ?? <ClassSlot>[];
+    final TimetableData? data = ref.read(timetableProvider).value;
+    final List<ClassSlot> existing = data?.slots ?? <ClassSlot>[];
     for (final _ClassTime time in _times) {
       for (final ClassSlot slot in existing) {
         if (slot.subjectId != _subjectId) continue;
@@ -1016,6 +1048,31 @@ class _SlotFormState extends ConsumerState<_SlotForm> {
           return 'This subject already has a class on '
               '${kWeekdayNamesLong[time.weekday - 1]} at '
               '${Clock.format(time.startMinutes)}.';
+        }
+      }
+    }
+
+    // The other half: a one-off class already sitting on a date this rule would
+    // cover shares the same attendance key.
+    if (data != null) {
+      for (final _ClassTime time in _times) {
+        final DateTime? on = ClassClash.forWeekly(
+          extras: data.extras,
+          proposed: ClassSlot(
+            id: widget.slot?.id,
+            subjectId: _subjectId!,
+            weekday: time.weekday,
+            startMinutes: time.startMinutes,
+            endMinutes: time.endMinutes,
+            startDate: _startDate,
+            endDate: _endDate,
+          ),
+        );
+        if (on != null) {
+          return 'A one-off class for this subject is already at '
+              '${Clock.format(time.startMinutes)} on '
+              '${Dates.formatDayMonth(on)}, which this weekly class would land '
+              'on too. They would share one attendance mark.';
         }
       }
     }
@@ -1104,8 +1161,8 @@ class _SlotFormState extends ConsumerState<_SlotForm> {
   Widget build(BuildContext context) {
     final bool use24Hour =
         ref.watch(settingsProvider).value?.use24HourTime ?? false;
-    final int defaultDuration =
-        ref.watch(defaultDurationProvider(_subjectId));
+    final String durationLabel =
+        ref.watch(defaultDurationLabelProvider(_subjectId));
     final List<int> days = _days;
 
     return Column(
@@ -1132,7 +1189,7 @@ class _SlotFormState extends ConsumerState<_SlotForm> {
         SectionHeader(
           _isEditing ? 'Time and room' : 'Class times',
           trailing: Text(
-            'defaults to ${Clock.formatDuration(defaultDuration)}',
+            durationLabel,
             style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w600,
@@ -1390,27 +1447,121 @@ class _ClassTimeCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
-          TextField(
-            controller: time.roomController,
-            textCapitalization: TextCapitalization.characters,
-            style: const TextStyle(fontSize: 14),
-            decoration: InputDecoration(
-              isDense: true,
-              prefixIcon: Icon(Icons.place_outlined, size: 17),
-              prefixIconConstraints: BoxConstraints(
-                minWidth: 34,
-                minHeight: 34,
-              ),
-              hintText: 'Room (optional)',
-              filled: true,
-              fillColor: context.palette.surfaceHigher,
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: AppSpacing.sm,
-                vertical: AppSpacing.md,
-              ),
+          _RoomField(controller: time.roomController),
+        ],
+      ),
+    );
+  }
+}
+
+/// A room entry: free text, plus one-tap chips for the rooms saved in Settings.
+///
+/// The chips only fill the text field in — the room is still stored on the
+/// class as text, so a room that was never added to the list keeps working and
+/// forgetting a room later cannot rewrite a class. Tapping the chosen room
+/// clears it, which is the same rule the attendance buttons use.
+class _RoomField extends ConsumerWidget {
+  const _RoomField({required this.controller});
+
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final List<Room> rooms =
+        ref.watch(timetableProvider).value?.rooms ?? <Room>[];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        TextField(
+          controller: controller,
+          textCapitalization: TextCapitalization.characters,
+          style: const TextStyle(fontSize: 14),
+          decoration: InputDecoration(
+            isDense: true,
+            prefixIcon: const Icon(Icons.place_outlined, size: 17),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 34,
+              minHeight: 34,
+            ),
+            hintText: 'Room (optional)',
+            filled: true,
+            fillColor: context.palette.surfaceHigher,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm,
+              vertical: AppSpacing.md,
             ),
           ),
+        ),
+        if (rooms.isNotEmpty) ...<Widget>[
+          const SizedBox(height: AppSpacing.sm),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (BuildContext context, TextEditingValue value, _) {
+              final String current = value.text.trim().toLowerCase();
+              return Wrap(
+                spacing: AppSpacing.xs,
+                runSpacing: AppSpacing.xs,
+                children: <Widget>[
+                  for (final Room room in rooms)
+                    _RoomPickChip(
+                      label: room.name,
+                      selected: current == room.name.toLowerCase(),
+                      onTap: () => controller.text =
+                          current == room.name.toLowerCase() ? '' : room.name,
+                    ),
+                ],
+              );
+            },
+          ),
         ],
+      ],
+    );
+  }
+}
+
+class _RoomPickChip extends StatelessWidget {
+  const _RoomPickChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected
+          ? context.palette.accent.withValues(alpha: 0.18)
+          : Colors.transparent,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+            border: Border.all(
+              color: selected
+                  ? context.palette.accent.withValues(alpha: 0.7)
+                  : context.palette.outlineSoft,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected
+                  ? context.palette.textPrimary
+                  : context.palette.textSecondary,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1455,18 +1606,20 @@ Future<void> showExtraClassEditor(
   BuildContext context,
   WidgetRef ref, {
   DateTime? initialDate,
+  ExtraClass? extra,
 }) {
   return showAppSheet<void>(
     context: context,
-    title: 'One-off class',
-    child: _ExtraClassForm(initialDate: initialDate),
+    title: extra == null ? 'One-off class' : 'Edit one-off class',
+    child: _ExtraClassForm(initialDate: initialDate, extra: extra),
   );
 }
 
 class _ExtraClassForm extends ConsumerStatefulWidget {
-  const _ExtraClassForm({this.initialDate});
+  const _ExtraClassForm({this.initialDate, this.extra});
 
   final DateTime? initialDate;
+  final ExtraClass? extra;
 
   @override
   ConsumerState<_ExtraClassForm> createState() => _ExtraClassFormState();
@@ -1477,19 +1630,31 @@ class _ExtraClassFormState extends ConsumerState<_ExtraClassForm> {
   late DateTime _date;
   int _start = 9 * 60;
   int _end = 10 * 60;
-  final TextEditingController _room = TextEditingController();
+  late final TextEditingController _room;
   String? _error;
   bool _saving = false;
 
   /// See the weekly form: only a hand-set end time pins the length.
   bool _durationTouched = false;
 
+  bool get _isEditing => widget.extra != null;
+
   int get _defaultDuration => ref.read(defaultDurationProvider(_subjectId));
 
   @override
   void initState() {
     super.initState();
-    _date = widget.initialDate ?? Dates.today();
+    final ExtraClass? extra = widget.extra;
+    _date = extra?.date ?? widget.initialDate ?? Dates.today();
+    _room = TextEditingController(text: extra?.room ?? '');
+    if (extra != null) {
+      _subjectId = extra.subjectId;
+      _start = extra.startMinutes;
+      _end = extra.endMinutes;
+      // An existing class already has the length its owner meant, so opening
+      // the form must not re-length it from the category.
+      _durationTouched = true;
+    }
   }
 
   @override
@@ -1542,20 +1707,45 @@ class _ExtraClassFormState extends ConsumerState<_ExtraClassForm> {
       setState(() => _error = 'The end time must be after the start time.');
       return;
     }
+
+    // Rebuilt rather than copyWith so clearing the room actually clears it.
+    final ExtraClass value = ExtraClass(
+      id: widget.extra?.id,
+      subjectId: _subjectId!,
+      date: _date,
+      startMinutes: _start,
+      endMinutes: _end,
+      room: _room.text.trim().isEmpty ? null : _room.text.trim(),
+      note: widget.extra?.note,
+    );
+
+    final TimetableData? data = ref.read(timetableProvider).value;
+    if (data != null &&
+        ClassClash.forOneOff(
+          slots: data.slots,
+          extras: data.extras,
+          proposed: value,
+        )) {
+      setState(() {
+        _error = 'This subject already has a class at '
+            '${Clock.format(_start)} on ${Dates.formatDayMonth(_date)}. '
+            'Attendance is recorded per subject and start time, so the two '
+            'would share one mark.';
+      });
+      return;
+    }
+
     setState(() {
       _saving = true;
       _error = null;
     });
 
-    await ref.read(actionsProvider).addExtraClass(
-          ExtraClass(
-            subjectId: _subjectId!,
-            date: _date,
-            startMinutes: _start,
-            endMinutes: _end,
-            room: _room.text.trim().isEmpty ? null : _room.text.trim(),
-          ),
-        );
+    final TimetableActions actions = ref.read(actionsProvider);
+    if (_isEditing) {
+      await actions.updateExtraClass(value);
+    } else {
+      await actions.addExtraClass(value);
+    }
 
     if (!mounted) return;
     Navigator.of(context).pop();
@@ -1563,6 +1753,9 @@ class _ExtraClassFormState extends ConsumerState<_ExtraClassForm> {
 
   @override
   Widget build(BuildContext context) {
+    final bool use24Hour =
+        ref.watch(settingsProvider).value?.use24HourTime ?? false;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -1589,7 +1782,7 @@ class _ExtraClassFormState extends ConsumerState<_ExtraClassForm> {
             Expanded(
               child: _FieldButton(
                 label: 'Starts',
-                value: Clock.format(_start),
+                value: Clock.format(_start, use24Hour: use24Hour),
                 icon: Icons.schedule_rounded,
                 onTap: () => _pickTime(isStart: true),
               ),
@@ -1598,22 +1791,16 @@ class _ExtraClassFormState extends ConsumerState<_ExtraClassForm> {
             Expanded(
               child: _FieldButton(
                 label: 'Ends',
-                value: Clock.format(_end),
+                value: Clock.format(_end, use24Hour: use24Hour),
                 icon: Icons.schedule_rounded,
                 onTap: () => _pickTime(isStart: false),
               ),
             ),
           ],
         ),
-        const SizedBox(height: AppSpacing.md),
-        TextField(
-          controller: _room,
-          textCapitalization: TextCapitalization.characters,
-          decoration: const InputDecoration(
-            labelText: 'Room',
-            hintText: 'Optional',
-          ),
-        ),
+        const SizedBox(height: AppSpacing.lg),
+        const SectionHeader('Room'),
+        _RoomField(controller: _room),
         if (_error != null) ...<Widget>[
           const SizedBox(height: AppSpacing.md),
           Text(
@@ -1624,7 +1811,220 @@ class _ExtraClassFormState extends ConsumerState<_ExtraClassForm> {
         const SizedBox(height: AppSpacing.xl),
         FilledButton(
           onPressed: _saving ? null : _save,
-          child: const Text('Add class'),
+          child: Text(_isEditing ? 'Save changes' : 'Add class'),
+        ),
+      ],
+    );
+  }
+}
+
+// ------------------------------------------------------- block grid editor
+
+/// Fills one cell of the block grid: choose a subject, how many blocks it runs
+/// for, and a room.
+///
+/// The times are not asked for — the cell already determines them, which is the
+/// whole reason for filling a timetable in on a grid rather than in a form.
+Future<void> showBlockClassEditor(
+  BuildContext context,
+  WidgetRef ref, {
+  required DateTime date,
+  required int blockIndex,
+}) {
+  return showAppSheet<void>(
+    context: context,
+    title: '${Dates.weekdayLong(date)} · block ${blockIndex + 1}',
+    child: _BlockClassForm(date: date, blockIndex: blockIndex),
+  );
+}
+
+class _BlockClassForm extends ConsumerStatefulWidget {
+  const _BlockClassForm({required this.date, required this.blockIndex});
+
+  final DateTime date;
+  final int blockIndex;
+
+  @override
+  ConsumerState<_BlockClassForm> createState() => _BlockClassFormState();
+}
+
+class _BlockClassFormState extends ConsumerState<_BlockClassForm> {
+  int? _subjectId;
+  final TextEditingController _room = TextEditingController();
+  late DateTime _startDate;
+
+  /// Null until a subject is chosen, at which point it follows that subject's
+  /// category. Set by hand it stays put, so a one-off long session is possible
+  /// without editing the category.
+  int? _blocks;
+  String? _error;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _startDate = widget.date;
+  }
+
+  @override
+  void dispose() {
+    _room.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save(DayGrid grid, int blocks) async {
+    if (_subjectId == null) {
+      setState(() => _error = 'Choose a subject.');
+      return;
+    }
+    final int start = grid.startOf(widget.blockIndex);
+    final int end = Clock.endFromStart(start, blocks * grid.blockMinutes);
+
+    final TimetableData? data = ref.read(timetableProvider).value;
+    for (final ClassSlot slot in data?.slots ?? <ClassSlot>[]) {
+      if (slot.subjectId == _subjectId &&
+          slot.weekday == widget.date.weekday &&
+          slot.startMinutes == start) {
+        setState(() {
+          _error = 'This subject already has a class in this block on '
+              '${Dates.weekdayLong(widget.date)}.';
+        });
+        return;
+      }
+    }
+
+    final ClassSlot proposed = ClassSlot(
+      subjectId: _subjectId!,
+      weekday: widget.date.weekday,
+      startMinutes: start,
+      endMinutes: end,
+      room: _room.text.trim().isEmpty ? null : _room.text.trim(),
+      startDate: _startDate,
+    );
+
+    if (data != null) {
+      final DateTime? on =
+          ClassClash.forWeekly(extras: data.extras, proposed: proposed);
+      if (on != null) {
+        setState(() {
+          _error = 'A one-off class for this subject is already in this block '
+              'on ${Dates.formatDayMonth(on)}. They would share one '
+              'attendance mark.';
+        });
+        return;
+      }
+    }
+
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+
+    await ref.read(actionsProvider).addSlot(proposed);
+
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final DayGrid grid = ref.watch(dayGridProvider);
+    final bool use24Hour =
+        ref.watch(settingsProvider).value?.use24HourTime ?? false;
+    final int categoryBlocks =
+        grid.blocksFor(ref.watch(defaultDurationProvider(_subjectId)));
+    final int blocks = _blocks ?? categoryBlocks;
+
+    // A class cannot run past the end of the day, but it always occupies at
+    // least the block it starts in — a floor of zero would offer no lengths at
+    // all and save a class ending the minute it began.
+    final int remaining = grid.blockCount - widget.blockIndex;
+    final int maxBlocks = remaining < 1 ? 1 : remaining;
+    final int effective = blocks > maxBlocks ? maxBlocks : blocks;
+    final int start = grid.startOf(widget.blockIndex);
+    final int end = start + effective * grid.blockMinutes;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        _SubjectPicker(
+          value: _subjectId,
+          onChanged: (int? id) => setState(() {
+            _subjectId = id;
+            _error = null;
+          }),
+        ),
+        const SizedBox(height: AppSpacing.xl),
+
+        SectionHeader(
+          'Length',
+          trailing: Text(
+            Clock.formatRange(start, end, use24Hour: use24Hour),
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: context.palette.textTertiary,
+            ),
+          ),
+        ),
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: <Widget>[
+            for (int n = 1; n <= maxBlocks && n <= 6; n++)
+              _DurationChip(
+                minutes: n * grid.blockMinutes,
+                label: '$n ${n == 1 ? 'block' : 'blocks'}',
+                selected: n == effective,
+                onTap: () => setState(() => _blocks = n),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          _subjectId == null
+              ? 'Choosing a subject sets this from its category.'
+              : ref.watch(defaultDurationLabelProvider(_subjectId)),
+          style: TextStyle(
+            fontSize: 12,
+            height: 1.4,
+            color: context.palette.textTertiary,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xl),
+
+        const SectionHeader('Room'),
+        _RoomField(controller: _room),
+        const SizedBox(height: AppSpacing.xl),
+
+        const SectionHeader('Repeats from'),
+        _FieldButton(
+          label: 'First class',
+          value: Dates.formatFull(_startDate),
+          icon: Icons.play_arrow_rounded,
+          onTap: () async {
+            final DateTime? picked = await showDatePicker(
+              context: context,
+              initialDate: _startDate,
+              firstDate: DateTime(DateTime.now().year - 2),
+              lastDate: DateTime(DateTime.now().year + 3),
+            );
+            if (picked == null || !mounted) return;
+            setState(() => _startDate = Dates.dayOf(picked));
+          },
+        ),
+
+        if (_error != null) ...<Widget>[
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            _error!,
+            style: TextStyle(color: context.palette.absent, fontSize: 13),
+          ),
+        ],
+        const SizedBox(height: AppSpacing.xl),
+        FilledButton(
+          onPressed: _saving ? null : () => _save(grid, effective),
+          child: const Text('Add to timetable'),
         ),
       ],
     );
@@ -1941,8 +2341,38 @@ class _FieldButton extends StatelessWidget {
 
 // ----------------------------------------------------------- session options
 
-/// Long-press menu on a class: cancel just this one, stop it repeating, or
-/// remove it entirely.
+/// Opens the right editor for whatever produced [session] — the weekly rule
+/// behind a recurring class, or the one-off class itself.
+///
+/// A session is derived, so it carries only the id of its origin. Resolving
+/// that id in one place keeps the Today screen, the Timetable screen and the
+/// options sheet from each growing their own lookup.
+Future<void> showSessionEditor(
+  BuildContext context,
+  WidgetRef ref,
+  ClassSession session,
+) async {
+  final TimetableData? data = ref.read(timetableProvider).value;
+  if (data == null) return;
+
+  if (session.slotId != null) {
+    for (final ClassSlot slot in data.slots) {
+      if (slot.id != session.slotId) continue;
+      await showSlotEditor(context, ref, slot: slot);
+      return;
+    }
+    return;
+  }
+
+  for (final ExtraClass extra in data.extras) {
+    if (extra.id != session.extraClassId) continue;
+    await showExtraClassEditor(context, ref, extra: extra);
+    return;
+  }
+}
+
+/// Long-press menu on a class: edit it, cancel just this one, stop it
+/// repeating, or remove it entirely.
 Future<void> showSessionOptions(
   BuildContext context,
   WidgetRef ref,
@@ -1954,6 +2384,20 @@ Future<void> showSessionOptions(
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
+        _OptionTile(
+          icon: Icons.edit_outlined,
+          title: 'Edit this class',
+          subtitle: session.slotId != null
+              // Editing the rule, not the occurrence — worth saying, because
+              // the two options below act on this day alone.
+              ? 'Change the day, time, room or subject of the weekly class.'
+              : 'Change the date, time, room or subject.',
+          onTap: () async {
+            Navigator.of(context).pop();
+            await showSessionEditor(context, ref, session);
+          },
+        ),
+        const SizedBox(height: AppSpacing.md),
         _OptionTile(
           icon: Icons.block_rounded,
           title: 'Cancel just this class',

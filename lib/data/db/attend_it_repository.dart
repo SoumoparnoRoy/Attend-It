@@ -7,6 +7,7 @@ import '../models/class_category.dart';
 import '../models/class_slot.dart';
 import '../models/extra_class.dart';
 import '../models/holiday.dart';
+import '../models/room.dart';
 import '../models/subject.dart';
 import 'app_database.dart';
 
@@ -70,6 +71,45 @@ class AttendItRepository {
     );
     if (rows.isEmpty) return 0;
     return (rows.first['c'] as int?) ?? 0;
+  }
+
+  // ------------------------------------------------------------------- rooms
+
+  Future<List<Room>> getRooms() async {
+    final Database db = await _db;
+    final List<Map<String, Object?>> rows = await db.query(
+      'rooms',
+      orderBy: 'position ASC, name COLLATE NOCASE ASC',
+    );
+    return rows.map(Room.fromMap).toList();
+  }
+
+  /// Appends a room at the end of the list, which is where someone adding one
+  /// expects it to land.
+  Future<int> insertRoom(Room room) async {
+    final Database db = await _db;
+    final List<Map<String, Object?>> rows =
+        await db.rawQuery('SELECT MAX(position) AS m FROM rooms');
+    final int next = ((rows.first['m'] as int?) ?? -1) + 1;
+    return db.insert('rooms', room.copyWith(position: next).toMap());
+  }
+
+  Future<void> updateRoom(Room room) async {
+    if (room.id == null) return;
+    final Database db = await _db;
+    await db.update(
+      'rooms',
+      room.toMap(),
+      where: 'id = ?',
+      whereArgs: <Object?>[room.id],
+    );
+  }
+
+  /// Classes keep whatever room text they were given — the list is only the set
+  /// of suggestions, so removing an entry never edits a class.
+  Future<void> deleteRoom(int id) async {
+    final Database db = await _db;
+    await db.delete('rooms', where: 'id = ?', whereArgs: <Object?>[id]);
   }
 
   // ---------------------------------------------------------------- subjects

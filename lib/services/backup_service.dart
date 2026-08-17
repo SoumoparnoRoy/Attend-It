@@ -11,6 +11,7 @@ import '../data/models/class_category.dart';
 import '../data/models/class_slot.dart';
 import '../data/models/extra_class.dart';
 import '../data/models/holiday.dart';
+import '../data/models/room.dart';
 import '../data/models/subject.dart';
 import '../data/settings/app_settings.dart';
 
@@ -37,10 +38,11 @@ class BackupService {
   final AttendItRepository _repo;
   final SettingsService _settingsService;
 
-  /// v2 added class categories. Older backups still import — a missing
-  /// `categories` key simply means every subject falls back to the global
-  /// default class length.
-  static const int formatVersion = 2;
+  /// v2 added class categories, v3 the saved room list and the day-grid
+  /// settings. Older backups still import: a missing key just means that
+  /// feature was unused when the file was written, which is exactly what an
+  /// empty list or a zero block length already mean.
+  static const int formatVersion = 3;
 
   /// Written into every export so an import can tell our files from anything
   /// else pasted in.
@@ -49,6 +51,7 @@ class BackupService {
   /// Builds the full backup document.
   Future<Map<String, Object?>> buildBackup() async {
     final List<ClassCategory> categories = await _repo.getCategories();
+    final List<Room> rooms = await _repo.getRooms();
     final List<Subject> subjects = await _repo.getSubjects();
     final List<ClassSlot> slots = await _repo.getSlots();
     final List<ExtraClass> extras = await _repo.getExtraClasses();
@@ -63,6 +66,7 @@ class BackupService {
       'settings': settings.toJson(),
       'categories':
           categories.map((ClassCategory c) => c.toMap()).toList(),
+      'rooms': rooms.map((Room r) => r.toMap()).toList(),
       'subjects': subjects.map((Subject s) => s.toMap()).toList(),
       'slots': slots.map((ClassSlot s) => s.toMap()).toList(),
       'extraClasses': extras.map((ExtraClass e) => e.toMap()).toList(),
@@ -149,6 +153,14 @@ class BackupService {
           ),
         );
         if (oldId != null) categoryIdMap[oldId] = newId;
+      }
+
+      // Nothing references a room by id, so these need no id remapping.
+      for (final Object? raw in (data['rooms'] as List<Object?>?) ??
+          const <Object?>[]) {
+        if (raw is! Map) continue;
+        final Room room = Room.fromMap(Map<String, Object?>.from(raw));
+        await _repo.insertRoom(Room(name: room.name));
       }
 
       for (final Object? raw in (data['subjects'] as List<Object?>?) ??

@@ -9,10 +9,12 @@ import '../data/models/class_session.dart';
 import '../data/models/class_slot.dart';
 import '../data/models/extra_class.dart';
 import '../data/models/holiday.dart';
+import '../data/models/room.dart';
 import '../data/models/subject.dart';
 import '../data/settings/app_settings.dart';
 import '../domain/attendance_log.dart';
 import '../domain/attendance_stats.dart';
+import '../domain/day_grid.dart';
 import '../domain/schedule_engine.dart';
 import '../services/backup_service.dart';
 import '../services/notification_service.dart';
@@ -84,10 +86,17 @@ class TimetableData {
     required this.extras,
     required this.holidays,
     required this.records,
+    this.rooms = const <Room>[],
   });
 
   final List<ClassCategory> categories;
   final List<Subject> subjects;
+
+  /// Saved room numbers, offered wherever a room is typed. Defaulted because
+  /// this is a suggestion list rather than timetable structure — nothing breaks
+  /// when it is empty, which is also how every pre-v3 install starts.
+  final List<Room> rooms;
+
   final List<ClassSlot> slots;
   final List<ExtraClass> extras;
   final List<Holiday> holidays;
@@ -132,6 +141,7 @@ final timetableProvider = FutureProvider<TimetableData>((ref) async {
   final List<ExtraClass> extras = await repo.getExtraClasses();
   final List<Holiday> holidays = await repo.getHolidays();
   final List<AttendanceRecord> records = await repo.getAttendance();
+  final List<Room> rooms = await repo.getRooms();
   return TimetableData(
     categories: categories,
     subjects: subjects,
@@ -139,6 +149,7 @@ final timetableProvider = FutureProvider<TimetableData>((ref) async {
     extras: extras,
     holidays: holidays,
     records: records,
+    rooms: rooms,
   );
 });
 
@@ -208,6 +219,22 @@ class VisibleWeekController extends Notifier<DateTime> {
   void shiftWeeks(int weeks) => state = Dates.addDays(state, weeks * 7);
 
   void goToThisWeek() => state = Dates.startOfWeek(Dates.today());
+}
+
+/// Which of the two home layouts is showing: the day's classes, or the week as
+/// a block grid.
+enum HomeView { day, grid }
+
+final homeViewProvider = NotifierProvider<HomeViewController, HomeView>(
+  HomeViewController.new,
+);
+
+class HomeViewController extends Notifier<HomeView> {
+  @override
+  HomeView build() => HomeView.day;
+
+  void toggle() =>
+      state = state == HomeView.day ? HomeView.grid : HomeView.day;
 }
 
 // ------------------------------------------------------------------- stats
@@ -373,6 +400,12 @@ final announcedAlertsProvider =
   AnnouncedAlertsController.new,
 );
 
+/// The day divided into uniform lecture blocks, or [DayGrid.none] until the
+/// user has set a block length.
+final dayGridProvider = Provider<DayGrid>((ref) {
+  return ref.watch(settingsProvider).value?.dayGrid ?? DayGrid.none;
+});
+
 /// Resolves the default length of a class for a given subject:
 /// the subject's category first, then the global setting.
 ///
@@ -387,6 +420,29 @@ final defaultDurationProvider =
   final ClassCategory? category =
       data.categoryFor(data.subjectById(subjectId));
   return category?.defaultDurationMinutes ?? fallback;
+});
+
+/// Says *why* a class came out the length it did — "Lab · 2 blocks · 1h 40m",
+/// or "no category · 1h" when the global fallback was used.
+///
+/// Without this the two rules are indistinguishable on screen, which is how a
+/// subject that was never given a category reads as a broken feature rather
+/// than as a subject that was never given a category.
+final defaultDurationLabelProvider =
+    Provider.family<String, int?>((ref, int? subjectId) {
+  final int minutes = ref.watch(defaultDurationProvider(subjectId));
+  final DayGrid grid = ref.watch(dayGridProvider);
+  final TimetableData? data = ref.watch(timetableProvider).value;
+  final ClassCategory? category =
+      data?.categoryFor(data.subjectById(subjectId));
+
+  final List<String> parts = <String>[category?.name ?? 'no category'];
+  if (grid.isWholeBlocks(minutes)) {
+    final int blocks = grid.blocksFor(minutes);
+    parts.add('$blocks ${blocks == 1 ? 'block' : 'blocks'}');
+  }
+  parts.add(Clock.formatDuration(minutes));
+  return parts.join(' · ');
 });
 
 // ------------------------------------------------------------------ actions
@@ -441,6 +497,26 @@ class TimetableActions {
   Future<int> countSubjectsInCategory(int id) =>
       _repo.countSubjectsInCategory(id);
 
+  // rooms ------------------------------------------------------------------
+
+  Future<int> addRoom(Room room) async {
+    final int id = await _repo.insertRoom(room);
+    await _refresh();
+    return id;
+  }
+
+  Future<void> updateRoom(Room room) async {
+    await _repo.updateRoom(room);
+    await _refresh();
+  }
+
+  /// Only forgets the suggestion. Classes already assigned this room keep it,
+  /// because the room is stored on the class as text.
+  Future<void> deleteRoom(int id) async {
+    await _repo.deleteRoom(id);
+    await _refresh();
+  }
+
   // subjects ---------------------------------------------------------------
 
   Future<int> addSubject(Subject subject) async {
@@ -492,6 +568,15 @@ class TimetableActions {
 
   Future<void> addExtraClass(ExtraClass extra) async {
     await _repo.insertExtraClass(extra);
+    await _refresh();
+  }
+
+  /// Moving a one-off class leaves any mark already made against it behind at
+  /// the old `(subject, date, start time)`, exactly as editing a weekly rule
+  /// does. The attendance log surfaces those as orphaned rather than deleting
+  /// history the user did record.
+  Future<void> updateExtraClass(ExtraClass extra) async {
+    await _repo.updateExtraClass(extra);
     await _refresh();
   }
 

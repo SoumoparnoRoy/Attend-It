@@ -37,6 +37,10 @@ calls. It works on a train with no signal.
   in place.
 - **Class categories** - Lab / Theory / Tutorial with default lengths, so
   picking a start time fills in the end time.
+- **A day divided into blocks** - set when your day starts and ends and how long
+  one lecture runs, and fill your timetable in on a grid instead of a form. A
+  class takes up a whole number of blocks, so a double lab is two of them.
+- **Saved rooms** - keep your room numbers once and pick them with a tap.
 - **Holidays** - skipped everywhere and never counted against you.
 - **Light and dark themes** - pick one or follow the device.
 - **Notifications** - pre-class reminders, an evening nudge to mark what you
@@ -83,8 +87,11 @@ powershell -ExecutionPolicy Bypass -File tool\bootstrap.ps1
 
 ## Screens
 
-**Today** - a date strip and the day's classes as cards. Past classes you never
-marked surface as a banner, and "All present" marks a whole day at once.
+**Today** - a date strip and the day's classes as cards, each showing its time,
+room, teacher and category. Past classes you never marked surface as a banner,
+and "All present" marks a whole day at once. The grid button in the corner swaps
+the day for the whole week laid out block by block; tapping an empty block adds a
+class there, and long-pressing a class edits, cancels or removes it.
 
 **Timetable** - the week laid out day by day. Add, edit or remove classes here.
 Adding a weekly class lets you tick several weekdays at once, so "Mon/Wed/Fri
@@ -93,8 +100,9 @@ at 9" is one trip through the form.
 **Attendance** - overall and per-subject percentages against your target, plus
 the skip allowance, the recovery count, and whether the target is reachable.
 
-**Settings** - semester dates, attendance target, subjects, class categories,
-theme, notifications, holidays, and JSON export/import.
+**Settings** - semester dates, attendance target, subjects, the shape of the
+teaching day, saved rooms, class categories, theme, notifications, holidays, and
+JSON export/import.
 
 ### Removing a class
 

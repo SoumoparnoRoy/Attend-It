@@ -13,6 +13,7 @@ import '../../services/notification_service.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
 import '../subjects/class_editor_sheets.dart';
+import '../timetable/week_grid_view.dart';
 import 'session_card.dart';
 import 'week_strip.dart';
 
@@ -56,7 +57,11 @@ class TodayScreen extends ConsumerWidget {
     final Map<int, DayMarker> markers = ref.watch(dayMarkersProvider);
     final List<ClassSession> unmarked = ref.watch(unmarkedSessionsProvider);
     final TimetableData? data = ref.watch(timetableProvider).value;
+    final HomeView view = ref.watch(homeViewProvider);
     final bool isToday = Dates.isSameDay(selected, Dates.today());
+    // The grid follows whichever day you were looking at, so switching views
+    // does not lose your place and needs no state of its own.
+    final DateTime gridWeek = Dates.startOfWeek(selected);
 
     final Holiday? holiday = engine?.holidayOn(selected);
     final bool outsideSemester = engine?.isOutsideSemester(selected) ?? false;
@@ -85,20 +90,53 @@ class TodayScreen extends ConsumerWidget {
                 child: _Header(
                   selected: selected,
                   isToday: isToday,
+                  view: view,
                   onJumpToToday: () =>
                       ref.read(selectedDateProvider.notifier).goToToday(),
+                  onToggleView: () =>
+                      ref.read(homeViewProvider.notifier).toggle(),
                 ),
               ),
-              SliverToBoxAdapter(
-                child: WeekStrip(
-                  selected: selected,
-                  markers: markers,
-                  onSelected: (DateTime date) =>
-                      ref.read(selectedDateProvider.notifier).select(date),
+              if (view == HomeView.day)
+                SliverToBoxAdapter(
+                  child: WeekStrip(
+                    selected: selected,
+                    markers: markers,
+                    onSelected: (DateTime date) =>
+                        ref.read(selectedDateProvider.notifier).select(date),
+                  ),
                 ),
-              ),
               const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.lg)),
 
+              if (view == HomeView.grid) ...<Widget>[
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    0,
+                    AppSpacing.lg,
+                    AppSpacing.md,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _GridWeekNav(
+                      weekStart: gridWeek,
+                      onShift: (int weeks) => ref
+                          .read(selectedDateProvider.notifier)
+                          .shiftDays(weeks * 7),
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    0,
+                    AppSpacing.lg,
+                    120,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: WeekGridView(weekStart: gridWeek),
+                  ),
+                ),
+              ] else ...<Widget>[
               if (stats.hasData)
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(
@@ -220,6 +258,7 @@ class TodayScreen extends ConsumerWidget {
                   },
                 ),
               ),
+              ],
             ],
           ),
         ),
@@ -346,18 +385,23 @@ class _Header extends ConsumerWidget {
   const _Header({
     required this.selected,
     required this.isToday,
+    required this.view,
     required this.onJumpToToday,
+    required this.onToggleView,
   });
 
   final DateTime selected;
   final bool isToday;
+  final HomeView view;
   final VoidCallback onJumpToToday;
+  final VoidCallback onToggleView;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ClassSession? next = ref.watch(nextSessionProvider);
     final AppSettings settings =
         ref.watch(settingsProvider).value ?? const AppSettings();
+    final bool isGrid = view == HomeView.grid;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -374,7 +418,7 @@ class _Header extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  Dates.relativeLabel(selected),
+                  isGrid ? 'Week' : Dates.relativeLabel(selected),
                   style: const TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w800,
@@ -410,6 +454,80 @@ class _Header extends ConsumerWidget {
                 foregroundColor: context.palette.accent,
               ),
             ),
+          const SizedBox(width: AppSpacing.sm),
+          IconButton(
+            onPressed: onToggleView,
+            tooltip: isGrid ? 'Show the day' : 'Show the week grid',
+            icon: Icon(
+              isGrid ? Icons.view_agenda_outlined : Icons.grid_view_rounded,
+            ),
+            style: IconButton.styleFrom(
+              backgroundColor: isGrid
+                  ? context.palette.accent.withValues(alpha: 0.16)
+                  : context.palette.surfaceHigh,
+              foregroundColor: context.palette.accent,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Week stepper for the grid. The day list has the date strip for this, but the
+/// grid shows a whole week at a time so it needs its own.
+class _GridWeekNav extends StatelessWidget {
+  const _GridWeekNav({required this.weekStart, required this.onShift});
+
+  final DateTime weekStart;
+  final ValueChanged<int> onShift;
+
+  @override
+  Widget build(BuildContext context) {
+    final DateTime weekEnd = Dates.addDays(weekStart, 6);
+    final bool isCurrent =
+        Dates.isSameDay(weekStart, Dates.startOfWeek(Dates.today()));
+
+    return SurfaceCard(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
+      child: Row(
+        children: <Widget>[
+          IconButton(
+            onPressed: () => onShift(-1),
+            icon: const Icon(Icons.chevron_left_rounded),
+            color: context.palette.textSecondary,
+          ),
+          Expanded(
+            child: Column(
+              children: <Widget>[
+                Text(
+                  isCurrent ? 'This week' : 'Week of',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: context.palette.textTertiary,
+                  ),
+                ),
+                Text(
+                  '${weekStart.day} ${kMonthNamesShort[weekStart.month - 1]} – '
+                  '${weekEnd.day} ${kMonthNamesShort[weekEnd.month - 1]}',
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: () => onShift(1),
+            icon: const Icon(Icons.chevron_right_rounded),
+            color: context.palette.textSecondary,
+          ),
         ],
       ),
     );

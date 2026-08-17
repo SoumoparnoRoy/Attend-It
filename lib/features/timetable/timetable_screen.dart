@@ -95,7 +95,7 @@ class TimetableScreen extends ConsumerWidget {
                         initialDate: day,
                       ),
                       onTapSession: (ClassSession session) =>
-                          _editSession(context, ref, session, slots),
+                          showSessionEditor(context, ref, session),
                       onLongPressSession: (ClassSession session) =>
                           showSessionOptions(context, ref, session),
                     );
@@ -113,27 +113,6 @@ class TimetableScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _editSession(
-    BuildContext context,
-    WidgetRef ref,
-    ClassSession session,
-    List<ClassSlot> slots,
-  ) async {
-    if (session.slotId == null) {
-      // One-off classes have no rule to edit, so offer the options menu.
-      await showSessionOptions(context, ref, session);
-      return;
-    }
-    ClassSlot? slot;
-    for (final ClassSlot candidate in slots) {
-      if (candidate.id == session.slotId) {
-        slot = candidate;
-        break;
-      }
-    }
-    if (slot == null || !context.mounted) return;
-    await showSlotEditor(context, ref, slot: slot);
-  }
 }
 
 class _WeekHeader extends StatelessWidget {

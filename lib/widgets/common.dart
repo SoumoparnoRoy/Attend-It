@@ -462,6 +462,96 @@ class Pill extends StatelessWidget {
   }
 }
 
+/// Sheet body for "type one thing and confirm": a text field and a submit button
+/// that pops the sheet with what was typed.
+///
+/// It exists so the controller has an owner. Creating one at the call site and
+/// disposing it after `showAppSheet` returns crashes the app: the route is popped
+/// but its dismiss animation still has the field mounted, so the controller dies
+/// while a live widget listens to it. A State disposes on unmount, which is after
+/// the animation, so the ordering is right by construction rather than by every
+/// call site remembering.
+class SheetTextForm extends StatefulWidget {
+  const SheetTextForm({
+    super.key,
+    required this.submitLabel,
+    this.initial = '',
+    this.header,
+    this.labelText,
+    this.hintText,
+    this.maxLines = 1,
+    this.textCapitalization = TextCapitalization.sentences,
+    this.emptyFallback,
+  });
+
+  final String submitLabel;
+  final String initial;
+
+  /// Optional content above the field — a date, an explanation.
+  final Widget? header;
+
+  final String? labelText;
+  final String? hintText;
+  final int maxLines;
+  final TextCapitalization textCapitalization;
+
+  /// Popped when the field is left empty. Without one, submitting an empty
+  /// field does nothing rather than saving a blank name.
+  final String? emptyFallback;
+
+  @override
+  State<SheetTextForm> createState() => _SheetTextFormState();
+}
+
+class _SheetTextFormState extends State<SheetTextForm> {
+  late final TextEditingController _input =
+      TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _input.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final String value = _input.text.trim();
+    if (value.isEmpty) {
+      if (widget.emptyFallback == null) return;
+      Navigator.of(context).pop(widget.emptyFallback);
+      return;
+    }
+    Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (widget.header != null) ...<Widget>[
+          widget.header!,
+          const SizedBox(height: AppSpacing.md),
+        ],
+        TextField(
+          controller: _input,
+          autofocus: true,
+          maxLines: widget.maxLines,
+          textCapitalization: widget.textCapitalization,
+          decoration: InputDecoration(
+            labelText: widget.labelText,
+            hintText: widget.hintText,
+          ),
+          // Only a single-line field gets a usable submit action; a multi-line
+          // one needs the return key for newlines.
+          onSubmitted: widget.maxLines == 1 ? (_) => _submit() : null,
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        FilledButton(onPressed: _submit, child: Text(widget.submitLabel)),
+      ],
+    );
+  }
+}
+
 /// Standard bottom-sheet wrapper: drag handle, title, scrollable body.
 Future<T?> showAppSheet<T>({
   required BuildContext context,

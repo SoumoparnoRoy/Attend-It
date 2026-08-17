@@ -16,6 +16,7 @@ import '../../state/providers.dart';
 import '../../widgets/common.dart';
 import '../subjects/class_editor_sheets.dart';
 import '../subjects/subjects_screen.dart';
+import 'timetable_layout_section.dart';
 
 /// Semester setup, attendance target, notifications, holidays and backup.
 class SettingsScreen extends ConsumerWidget {
@@ -168,6 +169,12 @@ class SettingsScreen extends ConsumerWidget {
               'Add courses, change their colour or attendance target, and '
               'delete ones you have dropped.',
             ),
+            const SizedBox(height: AppSpacing.xl),
+
+            // ------------------------------------------- timetable layout
+            const DayGridSection(),
+            const SizedBox(height: AppSpacing.xl),
+            const RoomsSection(),
             const SizedBox(height: AppSpacing.xl),
 
             // ------------------------------------------------ class lengths
@@ -657,40 +664,23 @@ class SettingsScreen extends ConsumerWidget {
     );
     if (date == null || !context.mounted) return;
 
-    final TextEditingController name = TextEditingController();
     final String? label = await showAppSheet<String>(
       context: context,
       title: 'Name this holiday',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Text(
-            Dates.formatFull(date),
-            style: TextStyle(
-              fontSize: 13,
-              color: context.palette.textSecondary,
-            ),
+      child: SheetTextForm(
+        submitLabel: 'Add holiday',
+        hintText: 'e.g. Diwali, Founder\'s Day',
+        textCapitalization: TextCapitalization.words,
+        emptyFallback: 'Holiday',
+        header: Text(
+          Dates.formatFull(date),
+          style: TextStyle(
+            fontSize: 13,
+            color: context.palette.textSecondary,
           ),
-          const SizedBox(height: AppSpacing.md),
-          TextField(
-            controller: name,
-            autofocus: true,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              hintText: 'e.g. Diwali, Founder\'s Day',
-            ),
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(
-              name.text.trim().isEmpty ? 'Holiday' : name.text.trim(),
-            ),
-            child: const Text('Add holiday'),
-          ),
-        ],
+        ),
       ),
     );
-    name.dispose();
     if (label == null) return;
 
     await ref
@@ -723,32 +713,20 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _import(BuildContext context, WidgetRef ref) async {
-    final TextEditingController input = TextEditingController();
     final String? json = await showAppSheet<String>(
       context: context,
       title: 'Import backup',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          const _Hint(
-            'Paste the contents of an Attend It! export. This replaces everything '
-            'currently in the app.',
-          ),
-          const SizedBox(height: AppSpacing.md),
-          TextField(
-            controller: input,
-            maxLines: 6,
-            decoration: const InputDecoration(hintText: '{ "app": "Attend It!", …'),
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(input.text),
-            child: const Text('Restore'),
-          ),
-        ],
+      child: const SheetTextForm(
+        submitLabel: 'Restore',
+        hintText: '{ "app": "Attend It!", …',
+        maxLines: 6,
+        textCapitalization: TextCapitalization.none,
+        header: _Hint(
+          'Paste the contents of an Attend It! export. This replaces everything '
+          'currently in the app.',
+        ),
       ),
     );
-    input.dispose();
     if (json == null || json.trim().isEmpty) return;
 
     final ImportResult result =
