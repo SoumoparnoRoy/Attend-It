@@ -100,6 +100,27 @@ void main() {
     });
   });
 
+  group('end time from a start', () {
+    test('adds the category length to the start', () {
+      expect(Clock.endFromStart(9 * 60, 120), 11 * 60);
+      expect(Clock.endFromStart(9 * 60, 60), 10 * 60);
+    });
+
+    test('keeps the end after the start when the length is zero', () {
+      expect(Clock.endFromStart(9 * 60, 0), 9 * 60 + 5);
+    });
+
+    test('does not spill past midnight', () {
+      expect(Clock.endFromStart(23 * 60, 120), Clock.minutesPerDay - 1);
+    });
+
+    test('a start too late for the five-minute floor still ends after it', () {
+      final int start = Clock.minutesPerDay - 2;
+      expect(Clock.endFromStart(start, 60), Clock.minutesPerDay - 1);
+      expect(Clock.endFromStart(start, 60), greaterThan(start));
+    });
+  });
+
   group('recurrence', () {
     test('a weekly slot appears on its weekday every week', () {
       final ScheduleEngine engine = buildEngine();

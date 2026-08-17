@@ -6,6 +6,8 @@
 /// hours, DST shifts or timezone drift.
 library;
 
+import 'dart:math' as math;
+
 const List<String> kWeekdayNamesShort = <String>[
   'Mon',
   'Tue',
@@ -147,6 +149,19 @@ class Clock {
   static int hourOf(int minutes) => minutes ~/ 60;
 
   static int minuteOf(int minutes) => minutes % 60;
+
+  /// The end time implied by a class starting at [startMinutes] and running
+  /// for [durationMinutes]. Never returns an end at or before the start, and
+  /// never spills past midnight — a class cannot straddle two days here,
+  /// because attendance is keyed by a single date.
+  static int endFromStart(int startMinutes, int durationMinutes) {
+    const int lastMinute = minutesPerDay - 1;
+    if (startMinutes >= lastMinute) return lastMinute;
+    // A late enough start leaves less than the five-minute floor before
+    // midnight, so the floor itself has to be clamped or the range inverts.
+    final int earliest = math.min(startMinutes + 5, lastMinute);
+    return (startMinutes + durationMinutes).clamp(earliest, lastMinute);
+  }
 
   static int nowInMinutes() {
     final DateTime now = DateTime.now();

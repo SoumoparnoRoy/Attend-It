@@ -770,6 +770,8 @@ class _ClassTime {
   int endMinutes;
   final TextEditingController roomController;
 
+  int get durationMinutes => endMinutes - startMinutes;
+
   String? get room {
     final String value = roomController.text.trim();
     return value.isEmpty ? null : value;
@@ -795,9 +797,11 @@ class _SlotFormState extends ConsumerState<_SlotForm> {
   String? _error;
   bool _saving = false;
 
-  /// Once a time has been chosen by hand, changing the subject no longer
-  /// rewrites it — the user's explicit choice wins over a category default.
-  bool _timesTouched = false;
+  /// Set once an *end* time has been chosen by hand, after which changing the
+  /// subject no longer re-lengths the rows. Picking a start time deliberately
+  /// does not count: that chooses when the class sits, not how long it runs,
+  /// so the category default should still apply to it.
+  bool _durationTouched = false;
 
   bool get _isEditing => widget.slot != null;
 
@@ -809,8 +813,7 @@ class _SlotFormState extends ConsumerState<_SlotForm> {
   void _applyDefaultDurationToAll() {
     final int duration = _defaultDuration;
     for (final _ClassTime time in _times) {
-      time.endMinutes = (time.startMinutes + duration)
-          .clamp(time.startMinutes + 5, Clock.minutesPerDay - 1);
+      time.endMinutes = Clock.endFromStart(time.startMinutes, duration);
     }
     if (_times.isNotEmpty) _lastEnd = _times.first.endMinutes;
   }
@@ -919,7 +922,7 @@ class _SlotFormState extends ConsumerState<_SlotForm> {
         _ClassTime(
           weekday: weekday,
           startMinutes: start,
-          endMinutes: start + duration,
+          endMinutes: Clock.endFromStart(start, duration),
         ),
       );
     });
@@ -949,15 +952,17 @@ class _SlotFormState extends ConsumerState<_SlotForm> {
 
     setState(() {
       _error = null;
-      _timesTouched = true;
       final int value = Clock.toMinutes(picked.hour, picked.minute);
       if (isStart) {
         // Setting a start fills the end in from the category's default length,
-        // which is the whole point of categories.
+        // which is the whole point of categories. An end the user already set
+        // by hand is kept, and only shifted to preserve its length.
+        final int duration =
+            _durationTouched ? time.durationMinutes : _defaultDuration;
         time.startMinutes = value;
-        time.endMinutes = (value + _defaultDuration)
-            .clamp(value + 5, Clock.minutesPerDay - 1);
+        time.endMinutes = Clock.endFromStart(value, duration);
       } else {
+        _durationTouched = true;
         time.endMinutes = value;
       }
       _lastStart = time.startMinutes;
@@ -1110,8 +1115,9 @@ class _SlotFormState extends ConsumerState<_SlotForm> {
           value: _subjectId,
           onChanged: (int? id) => setState(() {
             _subjectId = id;
-            // Adopt the new category's length, unless times were set by hand.
-            if (!_timesTouched) _applyDefaultDurationToAll();
+            // Adopt the new category's length, unless the user set an end
+            // time by hand.
+            if (!_durationTouched) _applyDefaultDurationToAll();
           }),
         ),
         const SizedBox(height: AppSpacing.xl),
@@ -1475,6 +1481,11 @@ class _ExtraClassFormState extends ConsumerState<_ExtraClassForm> {
   String? _error;
   bool _saving = false;
 
+  /// See the weekly form: only a hand-set end time pins the length.
+  bool _durationTouched = false;
+
+  int get _defaultDuration => ref.read(defaultDurationProvider(_subjectId));
+
   @override
   void initState() {
     super.initState();
@@ -1500,11 +1511,12 @@ class _ExtraClassFormState extends ConsumerState<_ExtraClassForm> {
     setState(() {
       final int value = Clock.toMinutes(picked.hour, picked.minute);
       if (isStart) {
-        final int duration = _end - _start;
+        final int duration =
+            _durationTouched ? _end - _start : _defaultDuration;
         _start = value;
-        _end = (value + (duration > 0 ? duration : 60))
-            .clamp(value + 5, Clock.minutesPerDay - 1);
+        _end = Clock.endFromStart(value, duration);
       } else {
+        _durationTouched = true;
         _end = value;
       }
     });
@@ -1556,7 +1568,12 @@ class _ExtraClassFormState extends ConsumerState<_ExtraClassForm> {
       children: <Widget>[
         _SubjectPicker(
           value: _subjectId,
-          onChanged: (int? id) => setState(() => _subjectId = id),
+          onChanged: (int? id) => setState(() {
+            _subjectId = id;
+            if (!_durationTouched) {
+              _end = Clock.endFromStart(_start, _defaultDuration);
+            }
+          }),
         ),
         const SizedBox(height: AppSpacing.xl),
         const SectionHeader('When'),
