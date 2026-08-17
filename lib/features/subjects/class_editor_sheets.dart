@@ -725,6 +725,28 @@ class _DurationChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return _OptionChip(
+      label: label ?? Clock.formatDuration(minutes),
+      selected: selected,
+      onTap: onTap,
+    );
+  }
+}
+
+/// One choice among a few — a length, or which way a class repeats.
+class _OptionChip extends StatelessWidget {
+  const _OptionChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
     return Material(
       color: selected
           ? context.palette.accent.withValues(alpha: 0.18)
@@ -744,12 +766,13 @@ class _DurationChip extends StatelessWidget {
             ),
           ),
           child: Text(
-            label ?? Clock.formatDuration(minutes),
+            label,
             style: TextStyle(
               fontSize: 13,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color:
-                  selected ? context.palette.textPrimary : context.palette.textSecondary,
+              color: selected
+                  ? context.palette.textPrimary
+                  : context.palette.textSecondary,
             ),
           ),
         ),
@@ -1821,10 +1844,12 @@ class _ExtraClassFormState extends ConsumerState<_ExtraClassForm> {
 // ------------------------------------------------------- block grid editor
 
 /// Fills one cell of the block grid: choose a subject, how many blocks it runs
-/// for, and a room.
+/// for, a room, and whether it repeats every week or happens once.
 ///
 /// The times are not asked for — the cell already determines them, which is the
-/// whole reason for filling a timetable in on a grid rather than in a form.
+/// whole reason for filling a timetable in on a grid rather than in a form. A
+/// one-off keeps its date for the same reason: the cell you tapped *is* the
+/// date, so offering a picker would let the sheet contradict the grid behind it.
 Future<void> showBlockClassEditor(
   BuildContext context,
   WidgetRef ref, {
@@ -1857,6 +1882,11 @@ class _BlockClassFormState extends ConsumerState<_BlockClassForm> {
   /// category. Set by hand it stays put, so a one-off long session is possible
   /// without editing the category.
   int? _blocks;
+
+  /// A grid cell is normally how a timetable gets built, so the weekly rule is
+  /// the default; a single make-up or rescheduled class is the exception.
+  bool _repeatsWeekly = true;
+
   String? _error;
   bool _saving = false;
 
@@ -1879,8 +1909,44 @@ class _BlockClassFormState extends ConsumerState<_BlockClassForm> {
     }
     final int start = grid.startOf(widget.blockIndex);
     final int end = Clock.endFromStart(start, blocks * grid.blockMinutes);
+    final String? room = _room.text.trim().isEmpty ? null : _room.text.trim();
 
     final TimetableData? data = ref.read(timetableProvider).value;
+
+    if (!_repeatsWeekly) {
+      final ExtraClass proposed = ExtraClass(
+        subjectId: _subjectId!,
+        date: widget.date,
+        startMinutes: start,
+        endMinutes: end,
+        room: room,
+      );
+      // One call covers both halves here: another one-off on this date, and a
+      // weekly rule whose window reaches it.
+      if (data != null &&
+          ClassClash.forOneOff(
+            slots: data.slots,
+            extras: data.extras,
+            proposed: proposed,
+          )) {
+        setState(() {
+          _error = 'This subject already has a class in this block on '
+              '${Dates.formatDayMonth(widget.date)}. They would share one '
+              'attendance mark.';
+        });
+        return;
+      }
+
+      setState(() {
+        _saving = true;
+        _error = null;
+      });
+      await ref.read(actionsProvider).addExtraClass(proposed);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      return;
+    }
+
     for (final ClassSlot slot in data?.slots ?? <ClassSlot>[]) {
       if (slot.subjectId == _subjectId &&
           slot.weekday == widget.date.weekday &&
@@ -1898,7 +1964,7 @@ class _BlockClassFormState extends ConsumerState<_BlockClassForm> {
       weekday: widget.date.weekday,
       startMinutes: start,
       endMinutes: end,
-      room: _room.text.trim().isEmpty ? null : _room.text.trim(),
+      room: room,
       startDate: _startDate,
     );
 
@@ -1997,22 +2063,57 @@ class _BlockClassFormState extends ConsumerState<_BlockClassForm> {
         _RoomField(controller: _room),
         const SizedBox(height: AppSpacing.xl),
 
-        const SectionHeader('Repeats from'),
-        _FieldButton(
-          label: 'First class',
-          value: Dates.formatFull(_startDate),
-          icon: Icons.play_arrow_rounded,
-          onTap: () async {
-            final DateTime? picked = await showDatePicker(
-              context: context,
-              initialDate: _startDate,
-              firstDate: DateTime(DateTime.now().year - 2),
-              lastDate: DateTime(DateTime.now().year + 3),
-            );
-            if (picked == null || !mounted) return;
-            setState(() => _startDate = Dates.dayOf(picked));
-          },
+        const SectionHeader('Repeats'),
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: <Widget>[
+            _OptionChip(
+              label: 'Every week',
+              selected: _repeatsWeekly,
+              onTap: () => setState(() {
+                _repeatsWeekly = true;
+                _error = null;
+              }),
+            ),
+            _OptionChip(
+              label: 'Just this once',
+              selected: !_repeatsWeekly,
+              onTap: () => setState(() {
+                _repeatsWeekly = false;
+                _error = null;
+              }),
+            ),
+          ],
         ),
+        const SizedBox(height: AppSpacing.md),
+        if (_repeatsWeekly)
+          _FieldButton(
+            label: 'First class',
+            value: Dates.formatFull(_startDate),
+            icon: Icons.play_arrow_rounded,
+            onTap: () async {
+              final DateTime? picked = await showDatePicker(
+                context: context,
+                initialDate: _startDate,
+                firstDate: DateTime(DateTime.now().year - 2),
+                lastDate: DateTime(DateTime.now().year + 3),
+              );
+              if (picked == null || !mounted) return;
+              setState(() => _startDate = Dates.dayOf(picked));
+            },
+          )
+        else
+          Text(
+            '${Dates.weekdayLong(widget.date)}, '
+            '${Dates.formatFull(widget.date)} only. It will not appear in any '
+            'other week.',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.4,
+              color: context.palette.textTertiary,
+            ),
+          ),
 
         if (_error != null) ...<Widget>[
           const SizedBox(height: AppSpacing.md),
@@ -2024,7 +2125,9 @@ class _BlockClassFormState extends ConsumerState<_BlockClassForm> {
         const SizedBox(height: AppSpacing.xl),
         FilledButton(
           onPressed: _saving ? null : () => _save(grid, effective),
-          child: const Text('Add to timetable'),
+          child: Text(
+            _repeatsWeekly ? 'Add to timetable' : 'Add one-off class',
+          ),
         ),
       ],
     );

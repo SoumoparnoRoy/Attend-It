@@ -40,7 +40,26 @@ const AppSettings _blockSettings = AppSettings(
   blockMinutes: 50,
 );
 
-TimetableData _fixture() => TimetableData(
+/// Captures what a form saved instead of writing it, so a test can tell a
+/// weekly rule from a one-off rather than inferring it from the sheet.
+/// The lists are owned by the test rather than by the fake, so a form that refuses
+/// to save — and so never reads [actionsProvider] at all — can still be checked
+/// for having written nothing.
+class _RecordingActions extends TimetableActions {
+  _RecordingActions(super.ref, {required this.slots, required this.extras});
+
+  final List<ClassSlot> slots;
+  final List<ExtraClass> extras;
+
+  @override
+  Future<void> addSlot(ClassSlot slot) async => slots.add(slot);
+
+  @override
+  Future<void> addExtraClass(ExtraClass extra) async => extras.add(extra);
+}
+
+TimetableData _fixture({List<ClassSlot> slots = const <ClassSlot>[]}) =>
+    TimetableData(
       categories: const <ClassCategory>[
         ClassCategory(id: 1, name: 'Lab', defaultDurationMinutes: 120),
       ],
@@ -58,7 +77,7 @@ TimetableData _fixture() => TimetableData(
           colorValue: AppColors.defaultSubjectColor,
         ),
       ],
-      slots: <ClassSlot>[],
+      slots: slots,
       extras: <ExtraClass>[],
       holidays: const <Holiday>[],
       records: <AttendanceRecord>[],
@@ -67,11 +86,14 @@ TimetableData _fixture() => TimetableData(
 Widget _host(
   Future<void> Function(BuildContext, WidgetRef) open, {
   AppSettings settings = _plainSettings,
+  List<ClassSlot> slots = const <ClassSlot>[],
+  TimetableActions Function(Ref)? actions,
 }) {
   return ProviderScope(
     overrides: [
-      timetableProvider.overrideWith((Ref ref) async => _fixture()),
+      timetableProvider.overrideWith((Ref ref) async => _fixture(slots: slots)),
       settingsProvider.overrideWith(() => _StaticSettings(settings)),
+      if (actions != null) actionsProvider.overrideWith(actions),
     ],
     child: MaterialApp(
       theme: AppTheme.dark(),
@@ -90,6 +112,15 @@ Widget _host(
 Future<void> _openSheet(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.text('open'));
+  await tester.pumpAndSettle();
+}
+
+/// Taps a button at the foot of a sheet, which is below the test viewport.
+Future<void> _tapButton(WidgetTester tester, String label) async {
+  final Finder button = find.text(label);
+  await tester.ensureVisible(button);
+  await tester.pumpAndSettle();
+  await tester.tap(button);
   await tester.pumpAndSettle();
 }
 
@@ -294,6 +325,109 @@ void main() {
       await tester.tap(find.text('3 blocks'));
       await tester.pumpAndSettle();
       expect(find.text('9:00 am – 11:30 am'), findsOneWidget);
+    });
+
+    testWidgets('repeats weekly by default, and writes a rule',
+        (WidgetTester tester) async {
+      final List<ClassSlot> written = <ClassSlot>[];
+      final List<ExtraClass> extras = <ExtraClass>[];
+      await tester.pumpWidget(
+        _host(
+          (c, ref) => showBlockClassEditor(
+            c,
+            ref,
+            date: Dates.startOfWeek(Dates.today()),
+            blockIndex: 0,
+          ),
+          settings: _blockSettings,
+          actions: (Ref ref) =>
+              _RecordingActions(ref, slots: written, extras: extras),
+        ),
+      );
+      await _openSheet(tester);
+
+      expect(find.text('First class'), findsOneWidget);
+      await tester.tap(find.text('Physics'));
+      await tester.pumpAndSettle();
+      await _tapButton(tester, 'Add to timetable');
+
+      expect(extras, isEmpty);
+      expect(written, hasLength(1));
+      expect(written.single.weekday, DateTime.monday);
+      expect(written.single.startMinutes, 9 * 60);
+    });
+
+    testWidgets('a one-off is locked to the tapped cell and writes an extra',
+        (WidgetTester tester) async {
+      final DateTime monday = Dates.startOfWeek(Dates.today());
+      final List<ClassSlot> written = <ClassSlot>[];
+      final List<ExtraClass> extras = <ExtraClass>[];
+      await tester.pumpWidget(
+        _host(
+          (c, ref) =>
+              showBlockClassEditor(c, ref, date: monday, blockIndex: 0),
+          settings: _blockSettings,
+          actions: (Ref ref) =>
+              _RecordingActions(ref, slots: written, extras: extras),
+        ),
+      );
+      await _openSheet(tester);
+
+      await tester.tap(find.text('Physics'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Just this once'));
+      await tester.pumpAndSettle();
+
+      // The cell fixes the date, so no picker can contradict the grid.
+      expect(find.text('First class'), findsNothing);
+      expect(find.textContaining('only.'), findsOneWidget);
+
+      await _tapButton(tester, 'Add one-off class');
+
+      expect(written, isEmpty);
+      expect(extras, hasLength(1));
+      final ExtraClass saved = extras.single;
+      expect(Dates.keyOf(saved.date), Dates.keyOf(monday));
+      // The block count still comes from the Lab category: 2 × 50 minutes.
+      expect(saved.startMinutes, 9 * 60);
+      expect(saved.endMinutes, 10 * 60 + 40);
+    });
+
+    testWidgets('a one-off on top of a weekly class of the same subject is '
+        'refused', (WidgetTester tester) async {
+      final DateTime monday = Dates.startOfWeek(Dates.today());
+      final List<ClassSlot> written = <ClassSlot>[];
+      final List<ExtraClass> extras = <ExtraClass>[];
+      await tester.pumpWidget(
+        _host(
+          (c, ref) =>
+              showBlockClassEditor(c, ref, date: monday, blockIndex: 0),
+          settings: _blockSettings,
+          slots: <ClassSlot>[
+            ClassSlot(
+              id: 1,
+              subjectId: 1,
+              weekday: DateTime.monday,
+              startMinutes: 9 * 60,
+              endMinutes: 10 * 60 + 40,
+              startDate: monday,
+            ),
+          ],
+          actions: (Ref ref) =>
+              _RecordingActions(ref, slots: written, extras: extras),
+        ),
+      );
+      await _openSheet(tester);
+
+      await tester.tap(find.text('Physics'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Just this once'));
+      await tester.pumpAndSettle();
+      await _tapButton(tester, 'Add one-off class');
+
+      // Both would key to (Physics, this Monday, 9:00) and share one mark.
+      expect(find.textContaining('share one'), findsOneWidget);
+      expect(extras, isEmpty);
     });
   });
 }
