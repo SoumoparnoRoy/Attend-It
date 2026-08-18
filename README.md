@@ -48,14 +48,6 @@ calls. It works on a train with no signal.
   all three.
 - **JSON backup** - export to clipboard and file, import to restore.
 
-## Screenshots
-
-| Today | Timetable |
-|:---:|:---:|
-| <img src="docs/screenshots/today.png" width="270" alt="Today screen"> | <img src="docs/screenshots/timetable.png" width="270" alt="Timetable screen"> |
-| **Attendance** | **Settings** |
-| <img src="docs/screenshots/attendance.png" width="270" alt="Attendance screen"> | <img src="docs/screenshots/settings.png" width="270" alt="Settings screen"> |
-
 ## Getting started
 
 You need [Flutter](https://docs.flutter.dev/install) 3.38.1 or newer and an
