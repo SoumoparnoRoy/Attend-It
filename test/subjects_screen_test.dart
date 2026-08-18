@@ -2,18 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:attend_it/core/app_theme.dart';
-import 'package:attend_it/core/date_utils.dart';
-import 'package:attend_it/data/models/attendance_record.dart';
-import 'package:attend_it/data/models/attendance_status.dart';
-import 'package:attend_it/data/models/class_category.dart';
-import 'package:attend_it/data/models/class_slot.dart';
-import 'package:attend_it/data/models/extra_class.dart';
-import 'package:attend_it/data/models/holiday.dart';
-import 'package:attend_it/data/models/subject.dart';
-import 'package:attend_it/data/settings/app_settings.dart';
-import 'package:attend_it/features/subjects/subjects_screen.dart';
-import 'package:attend_it/state/providers.dart';
+import 'package:zeolite/core/app_theme.dart';
+import 'package:zeolite/core/date_utils.dart';
+import 'package:zeolite/data/models/attendance_record.dart';
+import 'package:zeolite/data/models/attendance_status.dart';
+import 'package:zeolite/data/models/class_category.dart';
+import 'package:zeolite/data/models/class_slot.dart';
+import 'package:zeolite/data/models/extra_class.dart';
+import 'package:zeolite/data/models/holiday.dart';
+import 'package:zeolite/data/models/subject.dart';
+import 'package:zeolite/data/settings/app_settings.dart';
+import 'package:zeolite/features/subjects/subjects_screen.dart';
+import 'package:zeolite/state/providers.dart';
 
 /// Serves fixed settings so the screen never reaches SharedPreferences.
 class _StaticSettings extends SettingsController {

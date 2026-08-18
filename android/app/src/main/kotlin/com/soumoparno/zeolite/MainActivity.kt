@@ -1,4 +1,4 @@
-package com.soumoparno.attendit
+package com.soumoparno.zeolite
 
 import io.flutter.embedding.android.FlutterActivity
 

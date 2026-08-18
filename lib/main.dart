@@ -24,5 +24,5 @@ Future<void> main() async {
   // launch, so the service swallows and logs its own errors.
   await NotificationService.instance.init();
 
-  runApp(const ProviderScope(child: AttendItApp()));
+  runApp(const ProviderScope(child: ZeoliteApp()));
 }

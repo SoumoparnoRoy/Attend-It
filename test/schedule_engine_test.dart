@@ -1,13 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:attend_it/core/date_utils.dart';
-import 'package:attend_it/data/models/attendance_record.dart';
-import 'package:attend_it/data/models/attendance_status.dart';
-import 'package:attend_it/data/models/class_session.dart';
-import 'package:attend_it/data/models/class_slot.dart';
-import 'package:attend_it/data/models/extra_class.dart';
-import 'package:attend_it/data/models/holiday.dart';
-import 'package:attend_it/data/models/subject.dart';
-import 'package:attend_it/domain/schedule_engine.dart';
+import 'package:zeolite/core/date_utils.dart';
+import 'package:zeolite/data/models/attendance_record.dart';
+import 'package:zeolite/data/models/attendance_status.dart';
+import 'package:zeolite/data/models/class_session.dart';
+import 'package:zeolite/data/models/class_slot.dart';
+import 'package:zeolite/data/models/extra_class.dart';
+import 'package:zeolite/data/models/holiday.dart';
+import 'package:zeolite/data/models/subject.dart';
+import 'package:zeolite/domain/schedule_engine.dart';
 
 /// A Monday, used as the anchor for every fixture below.
 final DateTime monday = DateTime(2026, 8, 3);

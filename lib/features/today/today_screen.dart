@@ -361,7 +361,7 @@ class _InAppAlertDialog extends StatelessWidget {
               ),
             ),
           Text(
-            'Notifications for these are off, so Attend It! is telling you '
+            'Notifications for these are off, so Zeolite is telling you '
             'here instead. Change this in Settings → Notifications.',
             style: TextStyle(
               color: context.palette.textTertiary,

@@ -10,8 +10,8 @@ import 'features/timetable/timetable_screen.dart';
 import 'features/today/today_screen.dart';
 import 'state/providers.dart';
 
-class AttendItApp extends ConsumerWidget {
-  const AttendItApp({super.key});
+class ZeoliteApp extends ConsumerWidget {
+  const ZeoliteApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -21,7 +21,7 @@ class AttendItApp extends ConsumerWidget {
         ref.watch(settingsProvider).value?.themeMode ?? AppThemeMode.dark;
 
     return MaterialApp(
-      title: 'Attend It!',
+      title: 'Zeolite',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),

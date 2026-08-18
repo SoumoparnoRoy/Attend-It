@@ -34,6 +34,10 @@ class NotificationService {
   /// is well inside that, and we refresh on every data change anyway.
   static const int _maxClassReminders = 60;
 
+  // The three channel ids keep their pre-Zeolite names for the same reason the
+  // database file does — an id is how Android finds an existing channel, and a
+  // new one would silently discard whatever sound and importance the user had
+  // set. Only the titles below are user-visible, and those never named the app.
   static const AndroidNotificationChannel _classChannel =
       AndroidNotificationChannel(
     'attend_it_classes',
@@ -68,7 +72,7 @@ class NotificationService {
     } catch (error, stack) {
       // A missing or unrecognised zone must never stop the app from starting;
       // scheduling simply falls back to whatever tz.local resolved to.
-      debugPrint('AttendIt: timezone init failed: $error\n$stack');
+      debugPrint('Zeolite: timezone init failed: $error\n$stack');
     }
 
     const AndroidInitializationSettings android =
@@ -88,7 +92,7 @@ class NotificationService {
       }
       _ready = true;
     } catch (error, stack) {
-      debugPrint('AttendIt: notification init failed: $error\n$stack');
+      debugPrint('Zeolite: notification init failed: $error\n$stack');
     }
   }
 
@@ -241,7 +245,7 @@ class NotificationService {
         );
         scheduled++;
       } catch (error) {
-        debugPrint('AttendIt: could not schedule class reminder: $error');
+        debugPrint('Zeolite: could not schedule class reminder: $error');
       }
     }
   }
@@ -277,7 +281,7 @@ class NotificationService {
       await _plugin.zonedSchedule(
         id: _eveningReminderId,
         title: 'Mark today\'s attendance',
-        body: 'Tap to update Attend It! before you forget.',
+        body: 'Tap to update Zeolite before you forget.',
         scheduledDate: fireAt,
         notificationDetails: details,
         androidScheduleMode: mode,
@@ -286,7 +290,7 @@ class NotificationService {
         payload: 'evening',
       );
     } catch (error) {
-      debugPrint('AttendIt: could not schedule evening reminder: $error');
+      debugPrint('Zeolite: could not schedule evening reminder: $error');
     }
   }
 
@@ -325,7 +329,7 @@ class NotificationService {
           payload: 'danger:${subjectStats.subject.id}',
         );
       } catch (error) {
-        debugPrint('AttendIt: could not show danger alert: $error');
+        debugPrint('Zeolite: could not show danger alert: $error');
       }
       index++;
     }

@@ -10,6 +10,9 @@ class AppDatabase {
 
   static final AppDatabase instance = AppDatabase._();
 
+  // Keeps its pre-Zeolite name deliberately: the filename is how an existing
+  // install finds its data, so renaming it would strand every database in
+  // place and read as a wipe. It is never shown to the user.
   static const String fileName = 'attend_it.db';
   static const int schemaVersion = 3;
 

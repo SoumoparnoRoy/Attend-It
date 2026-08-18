@@ -15,8 +15,8 @@ import 'app_database.dart';
 ///
 /// The UI never touches SQL — it asks the repository for typed models, which
 /// keeps the widget layer testable and the schema replaceable.
-class AttendItRepository {
-  AttendItRepository({AppDatabase? db}) : _appDb = db ?? AppDatabase.instance;
+class ZeoliteRepository {
+  ZeoliteRepository({AppDatabase? db}) : _appDb = db ?? AppDatabase.instance;
 
   final AppDatabase _appDb;
 

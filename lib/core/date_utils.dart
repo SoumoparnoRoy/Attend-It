@@ -1,6 +1,6 @@
 /// Date and time helpers.
 ///
-/// Attend It! stores every calendar date as a *local midnight* [DateTime] and
+/// Zeolite stores every calendar date as a *local midnight* [DateTime] and
 /// every clock time as "minutes since midnight". Keeping both normalised means
 /// comparisons, map keys and database round-trips never suffer from stray
 /// hours, DST shifts or timezone drift.

@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:attend_it/core/app_theme.dart';
-import 'package:attend_it/core/date_utils.dart';
-import 'package:attend_it/data/models/attendance_record.dart';
-import 'package:attend_it/data/models/attendance_status.dart';
-import 'package:attend_it/data/models/class_session.dart';
-import 'package:attend_it/data/models/subject.dart';
-import 'package:attend_it/domain/attendance_log.dart';
+import 'package:zeolite/core/app_theme.dart';
+import 'package:zeolite/core/date_utils.dart';
+import 'package:zeolite/data/models/attendance_record.dart';
+import 'package:zeolite/data/models/attendance_status.dart';
+import 'package:zeolite/data/models/class_session.dart';
+import 'package:zeolite/data/models/subject.dart';
+import 'package:zeolite/domain/attendance_log.dart';
 
 const Subject _physics = Subject(
   id: 1,

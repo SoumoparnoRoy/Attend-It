@@ -1,6 +1,6 @@
 <div align="center">
 
-# Attend It!
+# Zeolite
 
 **Know exactly how many classes you can afford to miss.**
 
@@ -54,8 +54,8 @@ You need [Flutter](https://docs.flutter.dev/install) 3.38.1 or newer and an
 Android device or emulator.
 
 ```bash
-git clone https://github.com/SoumoparnoRoy/Attend-It.git
-cd Attend-It
+git clone https://github.com/SoumoparnoRoy/Zeolite.git
+cd Zeolite
 flutter pub get
 flutter run
 ```

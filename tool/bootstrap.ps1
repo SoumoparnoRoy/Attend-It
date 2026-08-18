@@ -1,5 +1,5 @@
 <#
-    Attend It! bootstrap
+    Zeolite bootstrap
     ------------------
     Generates the Android platform folder for YOUR installed Flutter version,
     then restores the app source on top of it and applies the two Android
@@ -19,7 +19,7 @@ $PSNativeCommandUseErrorActionPreference = $false
 
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
-Write-Host "Attend It! bootstrap in $root" -ForegroundColor Cyan
+Write-Host "Zeolite bootstrap in $root" -ForegroundColor Cyan
 
 # --- 0. Sanity check -------------------------------------------------------
 
@@ -35,7 +35,7 @@ flutter --version
 # --- 1. Stash the authored source -----------------------------------------
 
 $authored = @('lib', 'test', 'tool', 'pubspec.yaml', 'analysis_options.yaml', 'README.md')
-$backup = Join-Path $env:TEMP ("attend_it_backup_" + [System.Guid]::NewGuid().ToString('N').Substring(0, 8))
+$backup = Join-Path $env:TEMP ("zeolite_backup_" + [System.Guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path $backup | Out-Null
 
 Write-Host "`n[2/5] Backing up app source to $backup" -ForegroundColor Cyan
@@ -49,7 +49,7 @@ foreach ($item in $authored) {
 # --- 2. Generate the platform scaffolding ---------------------------------
 
 Write-Host "`n[3/5] Generating the Android project" -ForegroundColor Cyan
-flutter create . --project-name attend_it --org com.soumoparno --platforms android
+flutter create . --project-name zeolite --org com.soumoparno --platforms android
 
 # --- 3. Put the app source back -------------------------------------------
 
@@ -104,9 +104,9 @@ if (Test-Path $manifest) {
         Write-Host "  + notification receivers" -ForegroundColor Green
     }
 
-    if ($xml -match 'android:label="attend_it"') {
-        $xml = $xml -replace 'android:label="attend_it"', 'android:label="Attend It!"'
-        Write-Host "  + app label set to Attend It!" -ForegroundColor Green
+    if ($xml -match 'android:label="zeolite"') {
+        $xml = $xml -replace 'android:label="zeolite"', 'android:label="Zeolite"'
+        Write-Host "  + app label set to Zeolite" -ForegroundColor Green
     }
 
     Set-Content -Path $manifest -Value $xml -NoNewline -Encoding UTF8
@@ -125,7 +125,7 @@ if (Test-Path $gradleKts) {
         $block = @'
 
 
-// --- Added by Attend It! bootstrap -------------------------------------------
+// --- Added by Zeolite bootstrap -------------------------------------------
 // flutter_local_notifications schedules alarms via java.time, which needs
 // core library desugaring on older Android versions.
 android {
@@ -150,7 +150,7 @@ dependencies {
         $block = @'
 
 
-// --- Added by Attend It! bootstrap -------------------------------------------
+// --- Added by Zeolite bootstrap -------------------------------------------
 android {
     defaultConfig {
         multiDexEnabled true

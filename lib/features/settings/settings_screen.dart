@@ -504,7 +504,7 @@ class SettingsScreen extends ConsumerWidget {
 
             Center(
               child: Text(
-                'Attend It! · 1.0.0\nAll your data stays on this device.',
+                'Zeolite · 1.0.0\nAll your data stays on this device.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 12,
@@ -718,11 +718,11 @@ class SettingsScreen extends ConsumerWidget {
       title: 'Import backup',
       child: const SheetTextForm(
         submitLabel: 'Restore',
-        hintText: '{ "app": "Attend It!", …',
+        hintText: '{ "app": "Zeolite", …',
         maxLines: 6,
         textCapitalization: TextCapitalization.none,
         header: _Hint(
-          'Paste the contents of an Attend It! export. This replaces everything '
+          'Paste the contents of a Zeolite export. This replaces everything '
           'currently in the app.',
         ),
       ),

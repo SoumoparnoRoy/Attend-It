@@ -110,7 +110,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   const Text(
-                    'Attend It!',
+                    'Zeolite',
                     style: TextStyle(
                       fontSize: 34,
                       fontWeight: FontWeight.w800,

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:attend_it/domain/day_grid.dart';
+import 'package:zeolite/domain/day_grid.dart';
 
 /// 9:00–17:00 on 50-minute blocks: nine blocks with 30 minutes to spare.
 const DayGrid _grid = DayGrid(

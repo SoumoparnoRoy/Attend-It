@@ -5,7 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../core/date_utils.dart';
-import '../data/db/attend_it_repository.dart';
+import '../data/db/zeolite_repository.dart';
 import '../data/models/attendance_record.dart';
 import '../data/models/class_category.dart';
 import '../data/models/class_slot.dart';
@@ -35,7 +35,7 @@ class ImportResult {
 class BackupService {
   BackupService(this._repo, this._settingsService);
 
-  final AttendItRepository _repo;
+  final ZeoliteRepository _repo;
   final SettingsService _settingsService;
 
   /// v2 added class categories, v3 the saved room list and the day-grid
@@ -46,7 +46,19 @@ class BackupService {
 
   /// Written into every export so an import can tell our files from anything
   /// else pasted in.
-  static const String appTag = 'Attend It!';
+  static const String appTag = 'Zeolite';
+
+  /// The tag written before the app was renamed. Accepted on import and never
+  /// on export, so a backup taken under the old name still restores — the file
+  /// is the user's data, and a rebrand is no reason to reject it.
+  static const String _legacyAppTag = 'Attend It!';
+
+  /// Whether an export's `app` field is one we wrote.
+  ///
+  /// Separate from the import itself so the rename compatibility can be tested
+  /// without a database behind it.
+  static bool isRecognisedTag(Object? tag) =>
+      tag == appTag || tag == _legacyAppTag;
 
   /// Builds the full backup document.
   Future<Map<String, Object?>> buildBackup() async {
@@ -91,7 +103,7 @@ class BackupService {
     final String stamp = '${Dates.keyOf(now)}_'
         '${now.hour.toString().padLeft(2, '0')}'
         '${now.minute.toString().padLeft(2, '0')}';
-    final File file = File(p.join(dir.path, 'attend_it_backup_$stamp.json'));
+    final File file = File(p.join(dir.path, 'zeolite_backup_$stamp.json'));
     return file.writeAsString(json);
   }
 
@@ -106,7 +118,7 @@ class BackupService {
       if (decoded is! Map<String, Object?>) {
         return const ImportResult(
           success: false,
-          message: 'That does not look like an Attend It! backup.',
+          message: 'That does not look like a Zeolite backup.',
         );
       }
       data = decoded;
@@ -117,10 +129,10 @@ class BackupService {
       );
     }
 
-    if (data['app'] != appTag) {
+    if (!isRecognisedTag(data['app'])) {
       return const ImportResult(
         success: false,
-        message: 'This file was not created by Attend It!.',
+        message: 'This file was not created by Zeolite.',
       );
     }
 
@@ -128,7 +140,7 @@ class BackupService {
     if (version > formatVersion) {
       return const ImportResult(
         success: false,
-        message: 'This backup came from a newer version of Attend It!.',
+        message: 'This backup came from a newer version of Zeolite.',
       );
     }
 

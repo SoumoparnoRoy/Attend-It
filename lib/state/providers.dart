@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/date_utils.dart';
-import '../data/db/attend_it_repository.dart';
+import '../data/db/zeolite_repository.dart';
 import '../data/models/attendance_record.dart';
 import '../data/models/attendance_status.dart';
 import '../data/models/class_category.dart';
@@ -21,8 +21,8 @@ import '../services/notification_service.dart';
 
 // ---------------------------------------------------------------- singletons
 
-final repositoryProvider = Provider<AttendItRepository>(
-  (ref) => AttendItRepository(),
+final repositoryProvider = Provider<ZeoliteRepository>(
+  (ref) => ZeoliteRepository(),
 );
 
 final settingsServiceProvider = Provider<SettingsService>(
@@ -134,7 +134,7 @@ class TimetableData {
 /// hundred rows at most — so loading it once and deriving everything in memory
 /// is both simpler and faster than querying per screen.
 final timetableProvider = FutureProvider<TimetableData>((ref) async {
-  final AttendItRepository repo = ref.watch(repositoryProvider);
+  final ZeoliteRepository repo = ref.watch(repositoryProvider);
   final List<ClassCategory> categories = await repo.getCategories();
   final List<Subject> subjects = await repo.getSubjects();
   final List<ClassSlot> slots = await repo.getSlots();
@@ -455,7 +455,7 @@ class TimetableActions {
 
   final Ref _ref;
 
-  AttendItRepository get _repo => _ref.read(repositoryProvider);
+  ZeoliteRepository get _repo => _ref.read(repositoryProvider);
 
   Future<void> _refresh() async {
     _ref.invalidate(timetableProvider);

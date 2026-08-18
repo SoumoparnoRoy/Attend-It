@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:attend_it/core/date_utils.dart';
-import 'package:attend_it/data/models/class_slot.dart';
-import 'package:attend_it/data/models/extra_class.dart';
-import 'package:attend_it/domain/class_clash.dart';
+import 'package:zeolite/core/date_utils.dart';
+import 'package:zeolite/data/models/class_slot.dart';
+import 'package:zeolite/data/models/extra_class.dart';
+import 'package:zeolite/domain/class_clash.dart';
 
 /// A Monday inside the window every rule below covers.
 final DateTime _monday = Dates.fromKey(20260817);

@@ -1,4 +1,4 @@
-import 'package:attend_it/data/settings/app_settings.dart';
+import 'package:zeolite/data/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

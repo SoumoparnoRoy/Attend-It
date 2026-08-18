@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.soumoparno.attendit"
+    namespace = "com.soumoparno.zeolite"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -18,7 +18,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.soumoparno.attendit"
+        applicationId = "com.soumoparno.zeolite"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

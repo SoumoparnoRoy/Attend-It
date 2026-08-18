@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:attend_it/data/models/subject.dart';
-import 'package:attend_it/domain/attendance_stats.dart';
+import 'package:zeolite/data/models/subject.dart';
+import 'package:zeolite/domain/attendance_stats.dart';
 
 const Subject physics = Subject(id: 1, name: 'Physics', colorValue: 0xFF7C6BFF);
 

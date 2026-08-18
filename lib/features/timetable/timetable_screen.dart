@@ -61,7 +61,7 @@ class TimetableScreen extends ConsumerWidget {
                     icon: Icons.calendar_month_outlined,
                     title: 'Your timetable is empty',
                     message:
-                        'Add your weekly classes once and Attend It! will lay out every week for you.',
+                        'Add your weekly classes once and Zeolite will lay out every week for you.',
                     action: FilledButton.icon(
                       onPressed: () => showAddClassSheet(context, ref),
                       icon: const Icon(Icons.add_rounded),
