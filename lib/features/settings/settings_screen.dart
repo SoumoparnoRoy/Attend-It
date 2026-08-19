@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -481,15 +482,27 @@ class SettingsScreen extends ConsumerWidget {
                   _Row(
                     icon: Icons.ios_share_rounded,
                     title: 'Export backup',
-                    value: 'Save a JSON copy',
+                    value: 'Save a JSON file',
                     onTap: () => _export(context, ref),
                   ),
                   const Divider(indent: AppSpacing.lg),
                   _Row(
                     icon: Icons.download_rounded,
                     title: 'Import backup',
-                    value: 'Paste a previous export',
+                    value: 'Restore from a file',
                     onTap: () => _import(context, ref),
+                  ),
+                  const Divider(indent: AppSpacing.lg),
+                  _SwitchRow(
+                    icon: Icons.backup_outlined,
+                    title: 'Automatic backup',
+                    subtitle: settings.autoBackupEnabled
+                        ? 'Once a day, keeping the last '
+                            '${BackupService.keepAutoBackups}'
+                        : 'Off',
+                    value: settings.autoBackupEnabled,
+                    onChanged: (bool v) => controller
+                        .save(settings.copyWith(autoBackupEnabled: v)),
                   ),
                   const Divider(indent: AppSpacing.lg),
                   _Row(
@@ -692,47 +705,90 @@ class SettingsScreen extends ConsumerWidget {
 
   // ----------------------------------------------------------------- data
 
+  /// Saves through the system dialog so the file lands outside the app's own
+  /// folder, which is deleted with the app. Falls back to the clipboard if the
+  /// dialog fails — an awkward paste beats losing the export.
   Future<void> _export(BuildContext context, WidgetRef ref) async {
     final BackupService backup = ref.read(backupServiceProvider);
     try {
       final String json = await backup.exportToJsonString();
-      final File file = await backup.exportToFile();
+      final Uri? saved = await FilePicker.saveFile(
+        dialogTitle: 'Save Zeolite backup',
+        fileName: BackupService.fileNameFor(DateTime.now()),
+        bytes: utf8.encode(json),
+        mimeType: 'application/json',
+      );
+      if (!context.mounted) return;
+
+      if (saved == null) {
+        // Cancelled. Saying nothing would look like a failure.
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Export cancelled.')),
+        );
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Backup saved.')),
+      );
+    } catch (error) {
+      final String json = await backup.exportToJsonString();
       await Clipboard.setData(ClipboardData(text: json));
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Copied to clipboard and saved as ${file.path.split('/').last}',
-          ),
-          duration: const Duration(seconds: 5),
+          content: Text('Could not open the save dialog ($error). '
+              'The backup is on your clipboard instead.'),
+          duration: const Duration(seconds: 6),
         ),
       );
-    } catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Export failed: $error')));
     }
   }
 
+  /// Confirms before restoring, because the file dialog made this two taps from
+  /// the Settings list and it replaces everything. Reads bytes rather than a
+  /// path: a document-picker file is a `content://` URI with no path at all.
   Future<void> _import(BuildContext context, WidgetRef ref) async {
-    final String? json = await showAppSheet<String>(
+    final PlatformFile? picked = await FilePicker.pickFile(
+      dialogTitle: 'Choose a Zeolite backup',
+    );
+    if (picked == null || !context.mounted) return;
+
+    final bool? confirmed = await showDialog<bool>(
       context: context,
-      title: 'Import backup',
-      child: const SheetTextForm(
-        submitLabel: 'Restore',
-        hintText: '{ "app": "Zeolite", …',
-        maxLines: 6,
-        textCapitalization: TextCapitalization.none,
-        header: _Hint(
-          'Paste the contents of a Zeolite export. This replaces everything '
-          'currently in the app.',
+      builder: (BuildContext context) => AlertDialog(
+        backgroundColor: context.palette.surfaceHigh,
+        title: const Text('Restore this backup?'),
+        content: const Text(
+          'Everything currently in the app is replaced by the contents of '
+          'the file. This cannot be undone.',
+          style: TextStyle(height: 1.4),
         ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Restore'),
+          ),
+        ],
       ),
     );
-    if (json == null || json.trim().isEmpty) return;
+    if (confirmed != true) return;
 
-    final ImportResult result =
-        await ref.read(backupServiceProvider).importFromJsonString(json);
+    late final ImportResult result;
+    try {
+      final String json = utf8.decode(await picked.readAsBytes());
+      result = await ref.read(backupServiceProvider).importFromJsonString(json);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not read that file: $error')),
+      );
+      return;
+    }
+
     if (result.success) {
       await ref.read(actionsProvider).reloadAfterImport();
     }

@@ -50,6 +50,8 @@ class AppSettings {
     this.notifyEveningReminder = true,
     this.eveningReminderMinutes = 20 * 60,
     this.notifyAttendanceDanger = true,
+    this.autoBackupEnabled = false,
+    this.lastAutoBackupAt,
     this.onboarded = false,
   });
 
@@ -100,6 +102,15 @@ class AppSettings {
   final int eveningReminderMinutes;
 
   final bool notifyAttendanceDanger;
+
+  /// Off by default: it writes a file on its own, and a feature that starts
+  /// doing that without being asked is a feature the user did not consent to.
+  final bool autoBackupEnabled;
+
+  /// When the last automatic backup was written. Device state rather than user
+  /// data, which is why it is kept out of the export — restoring it onto
+  /// another phone would tell that phone a backup had already been taken.
+  final DateTime? lastAutoBackupAt;
 
   final bool onboarded;
 
@@ -157,6 +168,8 @@ class AppSettings {
     bool? notifyEveningReminder,
     int? eveningReminderMinutes,
     bool? notifyAttendanceDanger,
+    bool? autoBackupEnabled,
+    DateTime? lastAutoBackupAt,
     bool? onboarded,
   }) {
     return AppSettings(
@@ -180,6 +193,8 @@ class AppSettings {
           eveningReminderMinutes ?? this.eveningReminderMinutes,
       notifyAttendanceDanger:
           notifyAttendanceDanger ?? this.notifyAttendanceDanger,
+      autoBackupEnabled: autoBackupEnabled ?? this.autoBackupEnabled,
+      lastAutoBackupAt: lastAutoBackupAt ?? this.lastAutoBackupAt,
       onboarded: onboarded ?? this.onboarded,
     );
   }
@@ -202,6 +217,7 @@ class AppSettings {
         'notifyEveningReminder': notifyEveningReminder,
         'eveningReminderMinutes': eveningReminderMinutes,
         'notifyAttendanceDanger': notifyAttendanceDanger,
+        'autoBackupEnabled': autoBackupEnabled,
       };
 
   factory AppSettings.fromJson(Map<String, Object?> json) {
@@ -230,6 +246,7 @@ class AppSettings {
       eveningReminderMinutes:
           (json['eveningReminderMinutes'] as num?)?.toInt() ?? 20 * 60,
       notifyAttendanceDanger: json['notifyAttendanceDanger'] as bool? ?? true,
+      autoBackupEnabled: json['autoBackupEnabled'] as bool? ?? false,
       onboarded: true,
     );
   }
@@ -254,6 +271,8 @@ class SettingsService {
   static const String _kNotifyEvening = 'ut.notifyEveningReminder';
   static const String _kEveningMinutes = 'ut.eveningReminderMinutes';
   static const String _kNotifyDanger = 'ut.notifyAttendanceDanger';
+  static const String _kAutoBackup = 'ut.autoBackup';
+  static const String _kLastAutoBackup = 'ut.lastAutoBackup';
   static const String _kOnboarded = 'ut.onboarded';
 
   /// The modern, cache-free preferences API. `SharedPreferences.getInstance()`
@@ -283,6 +302,11 @@ class SettingsService {
       notifyEveningReminder: await prefs.getBool(_kNotifyEvening) ?? true,
       eveningReminderMinutes: await prefs.getInt(_kEveningMinutes) ?? 20 * 60,
       notifyAttendanceDanger: await prefs.getBool(_kNotifyDanger) ?? true,
+      autoBackupEnabled: await prefs.getBool(_kAutoBackup) ?? false,
+      lastAutoBackupAt: switch (await prefs.getInt(_kLastAutoBackup)) {
+        final int ms => DateTime.fromMillisecondsSinceEpoch(ms),
+        null => null,
+      },
       onboarded: await prefs.getBool(_kOnboarded) ?? false,
     );
   }
@@ -319,6 +343,15 @@ class SettingsService {
     await prefs.setBool(_kNotifyEvening, settings.notifyEveningReminder);
     await prefs.setInt(_kEveningMinutes, settings.eveningReminderMinutes);
     await prefs.setBool(_kNotifyDanger, settings.notifyAttendanceDanger);
+    await prefs.setBool(_kAutoBackup, settings.autoBackupEnabled);
+    if (settings.lastAutoBackupAt == null) {
+      await prefs.remove(_kLastAutoBackup);
+    } else {
+      await prefs.setInt(
+        _kLastAutoBackup,
+        settings.lastAutoBackupAt!.millisecondsSinceEpoch,
+      );
+    }
     await prefs.setBool(_kOnboarded, settings.onboarded);
   }
 }

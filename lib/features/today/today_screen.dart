@@ -76,6 +76,9 @@ class TodayScreen extends ConsumerWidget {
     // set makes a rebuild a no-op rather than a second popup.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (context.mounted) _showPendingAlerts(context, ref);
+      // Due at most once a day, and a no-op the rest of the time — the check is
+      // a date comparison, not an export.
+      ref.read(actionsProvider).maybeRunAutoBackup();
     });
 
     return Scaffold(

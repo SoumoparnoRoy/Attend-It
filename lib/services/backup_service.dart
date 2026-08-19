@@ -102,12 +102,81 @@ class BackupService {
   Future<File> exportToFile() async {
     final String json = await exportToJsonString();
     final Directory dir = await getApplicationDocumentsDirectory();
-    final DateTime now = DateTime.now();
+    final File file = File(p.join(dir.path, fileNameFor(DateTime.now())));
+    return file.writeAsString(json);
+  }
+
+  /// `zeolite_backup_20260819_1310.json` — sorts chronologically as plain text,
+  /// which is what lets the prune below pick the oldest without parsing dates
+  /// or trusting filesystem timestamps.
+  static String fileNameFor(DateTime now) {
     final String stamp = '${Dates.keyOf(now)}_'
         '${now.hour.toString().padLeft(2, '0')}'
         '${now.minute.toString().padLeft(2, '0')}';
-    final File file = File(p.join(dir.path, 'zeolite_backup_$stamp.json'));
-    return file.writeAsString(json);
+    return '$_filePrefix$stamp.json';
+  }
+
+  static const String _filePrefix = 'zeolite_backup_';
+
+  /// Five daily files is a working week of history for a few hundred KB, and
+  /// old ones are deleted rather than left to grow for the life of the install.
+  static const int keepAutoBackups = 5;
+
+  // ------------------------------------------------------------ auto backup
+
+  /// Whether an automatic backup is due. Separate from the writing so it can be
+  /// tested without a filesystem, and so the caller skips the export entirely —
+  /// serialising the database to find out nothing changed defeats the point.
+  static bool isAutoBackupDue({
+    required bool enabled,
+    required DateTime? lastAt,
+    required DateTime now,
+  }) {
+    if (!enabled) return false;
+    if (lastAt == null) return true;
+    return Dates.keyOf(now) != Dates.keyOf(lastAt);
+  }
+
+  /// Writes one automatic backup and prunes the oldest beyond
+  /// [keepAutoBackups]. Returns the file, or null when nothing was due.
+  ///
+  /// Goes to the app's own documents directory, not anywhere the user picked:
+  /// a save-dialog location is granted for that dialog only, so writing there
+  /// unattended would need a persisted URI permission the app never asks for.
+  Future<File?> runAutoBackup({
+    required bool enabled,
+    required DateTime? lastAt,
+    DateTime? nowOverride,
+  }) async {
+    final DateTime now = nowOverride ?? DateTime.now();
+    if (!isAutoBackupDue(enabled: enabled, lastAt: lastAt, now: now)) {
+      return null;
+    }
+    final File file = await exportToFile();
+    await pruneAutoBackups();
+    return file;
+  }
+
+  /// Deletes the oldest exports beyond [keepAutoBackups].
+  ///
+  /// Exports written into this folder before the file dialog existed are pruned
+  /// too — the folder goes when the app does, so nothing here is the durable
+  /// copy. A manual export lands wherever the user chose and is never touched.
+  Future<void> pruneAutoBackups() async {
+    final Directory dir = await getApplicationDocumentsDirectory();
+    final List<File> backups = <File>[
+      for (final FileSystemEntity e in dir.listSync())
+        if (e is File && p.basename(e.path).startsWith(_filePrefix)) e,
+    ]..sort((File a, File b) => p.basename(a.path).compareTo(p.basename(b.path)));
+
+    for (int i = 0; i < backups.length - keepAutoBackups; i++) {
+      try {
+        backups[i].deleteSync();
+      } catch (_) {
+        // A file the OS has locked or the user deleted underneath us is not
+        // worth failing a backup over; the next run tries again.
+      }
+    }
   }
 
   /// Replaces all current data with the contents of [jsonString].

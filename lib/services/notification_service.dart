@@ -177,7 +177,7 @@ class NotificationService {
     final AndroidScheduleMode mode = await _scheduleMode();
 
     if (settings.notifyBeforeClass) {
-      await _scheduleClassReminders(settings, upcoming, mode);
+      await _scheduleClassReminders(settings, upcoming, stats, mode);
     }
     if (settings.notifyEveningReminder) {
       await _scheduleEveningReminder(settings, mode);
@@ -199,21 +199,46 @@ class NotificationService {
     }
   }
 
+  /// Where a class reminder is going: when it starts, where, and who teaches
+  /// it, with whatever is missing simply left out.
+  ///
+  /// "Starts at" is gone because the title already says "in 15 min" — the two
+  /// together were saying the same thing twice.
+  static String reminderDetailLine(
+    ClassSession session, {
+    required bool use24Hour,
+  }) {
+    final String? room = session.room;
+    final String? teacher = session.subject.teacher;
+    return <String>[
+      Clock.format(session.startMinutes, use24Hour: use24Hour),
+      if (room != null && room.isNotEmpty) room,
+      if (teacher != null && teacher.isNotEmpty) teacher,
+    ].join(' · ');
+  }
+
+  /// The forward-looking sentence under the details, or null when there is
+  /// nothing useful to say yet.
+  ///
+  /// Reuses [SubjectStats.headline] rather than composing a second phrasing of
+  /// the same number, so the tray, the Today card and the Stats screen cannot
+  /// drift apart. A subject with no marks is skipped: "No classes marked yet"
+  /// on a reminder for the class you are about to attend is noise.
+  static String? reminderStandingLine(SubjectStats? subjectStats) {
+    if (subjectStats == null || !subjectStats.hasData) return null;
+    return subjectStats.headline;
+  }
+
   Future<void> _scheduleClassReminders(
     AppSettings settings,
     List<ClassSession> upcoming,
+    OverallStats stats,
     AndroidScheduleMode mode,
   ) async {
-    final NotificationDetails details = NotificationDetails(
-      android: AndroidNotificationDetails(
-        _classChannel.id,
-        _classChannel.name,
-        channelDescription: _classChannel.description,
-        importance: Importance.high,
-        priority: Priority.high,
-        category: AndroidNotificationCategory.reminder,
-      ),
-    );
+    final Map<int, SubjectStats> statsBySubject = <int, SubjectStats>{
+      for (final SubjectStats s in stats.subjects)
+        if (s.subject.id != null) s.subject.id!: s,
+    };
 
     final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
     int scheduled = 0;
@@ -226,18 +251,36 @@ class NotificationService {
       final tz.TZDateTime tzFireAt = tz.TZDateTime.from(fireAt, tz.local);
       if (!tzFireAt.isAfter(now)) continue;
 
-      final String room =
-          (session.room == null || session.room!.isEmpty) ? '' : ' · ${session.room}';
-      final String when = Clock.format(
-        session.startMinutes,
+      final String detail = reminderDetailLine(
+        session,
         use24Hour: settings.use24HourTime,
+      );
+      final String? standing =
+          reminderStandingLine(statsBySubject[session.subject.id]);
+      final String body =
+          standing == null ? detail : '$detail\n$standing';
+
+      // Built per notification rather than once outside the loop, because the
+      // big-text style carries the text itself. It is what keeps the second
+      // line out of the collapsed tray entry and visible on expand, so the
+      // reminder gains a line without taking more room.
+      final NotificationDetails details = NotificationDetails(
+        android: AndroidNotificationDetails(
+          _classChannel.id,
+          _classChannel.name,
+          channelDescription: _classChannel.description,
+          importance: Importance.high,
+          priority: Priority.high,
+          category: AndroidNotificationCategory.reminder,
+          styleInformation: BigTextStyleInformation(body),
+        ),
       );
 
       try {
         await _plugin.zonedSchedule(
           id: _classReminderBase + scheduled,
           title: '${session.subject.name} in ${settings.notifyLeadMinutes} min',
-          body: 'Starts at $when$room',
+          body: body,
           scheduledDate: tzFireAt,
           notificationDetails: details,
           androidScheduleMode: mode,

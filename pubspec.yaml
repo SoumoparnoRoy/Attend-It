@@ -30,6 +30,7 @@ dependencies:
   # NotificationService._resolveLocalLocation) rather than via a platform
   # plugin, which keeps the Kotlin Gradle Plugin out of the build.
   timezone: ^0.11.1
+  file_picker: ^12.0.0
 
 dev_dependencies:
   flutter_test:

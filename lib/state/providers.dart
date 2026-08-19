@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/date_utils.dart';
@@ -513,6 +516,44 @@ class TimetableActions {
       upcoming: engine.upcomingSessions(),
       stats: _ref.read(statsProvider),
     );
+  }
+
+  // backup -------------------------------------------------------------------
+
+  /// Guards against the home screen's post-frame callback firing again while
+  /// the first write is still in flight — it runs on every build, not only on
+  /// launch, and two concurrent exports would race on the same filename.
+  bool _autoBackupRunning = false;
+
+  /// Writes today's automatic backup if one is due, then records when.
+  ///
+  /// Called from the home screen rather than from [_refresh], because a backup
+  /// per mutation would serialise the whole database on every attendance tap
+  /// for a freshness gain measured in hours.
+  Future<void> maybeRunAutoBackup() async {
+    if (_autoBackupRunning) return;
+    final AppSettings? settings = _ref.read(settingsProvider).value;
+    if (settings == null || !settings.autoBackupEnabled) return;
+
+    _autoBackupRunning = true;
+    try {
+      final File? written =
+          await _ref.read(backupServiceProvider).runAutoBackup(
+                enabled: settings.autoBackupEnabled,
+                lastAt: settings.lastAutoBackupAt,
+              );
+      if (written == null) return;
+      await _ref
+          .read(settingsProvider.notifier)
+          .save(settings.copyWith(lastAutoBackupAt: DateTime.now()));
+    } catch (error) {
+      // A failed backup must not take the home screen down with it. The next
+      // launch tries again, and the stamp is only written on success so a
+      // failure does not count as today's backup.
+      debugPrint('Zeolite: auto backup failed: $error');
+    } finally {
+      _autoBackupRunning = false;
+    }
   }
 
   // categories -------------------------------------------------------------
