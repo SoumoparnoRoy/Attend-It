@@ -17,6 +17,7 @@ class AttendanceRecord {
     required this.date,
     required this.startMinutes,
     required this.status,
+    this.tagId,
     this.note,
     this.markedAt,
   });
@@ -26,6 +27,11 @@ class AttendanceRecord {
   final DateTime date;
   final int startMinutes;
   final AttendanceStatus status;
+
+  /// Optional label from the user's own list — "Proxy", "Online". Null means
+  /// untagged, which is what every mark made before tags existed still is.
+  final int? tagId;
+
   final String? note;
   final DateTime? markedAt;
 
@@ -41,6 +47,8 @@ class AttendanceRecord {
     DateTime? date,
     int? startMinutes,
     AttendanceStatus? status,
+    int? tagId,
+    bool clearTag = false,
     String? note,
     DateTime? markedAt,
   }) {
@@ -50,6 +58,7 @@ class AttendanceRecord {
       date: date ?? this.date,
       startMinutes: startMinutes ?? this.startMinutes,
       status: status ?? this.status,
+      tagId: clearTag ? null : (tagId ?? this.tagId),
       note: note ?? this.note,
       markedAt: markedAt ?? this.markedAt,
     );
@@ -61,6 +70,7 @@ class AttendanceRecord {
         'date': Dates.keyOf(date),
         'start_minutes': startMinutes,
         'status': status.name,
+        'tag_id': tagId,
         'note': note,
         'marked_at': (markedAt ?? DateTime.now()).millisecondsSinceEpoch,
       };
@@ -73,6 +83,7 @@ class AttendanceRecord {
       startMinutes: (map['start_minutes'] as int?) ?? 0,
       status: AttendanceStatus.fromName(map['status'] as String?) ??
           AttendanceStatus.present,
+      tagId: map['tag_id'] as int?,
       note: map['note'] as String?,
       markedAt: map['marked_at'] == null
           ? null

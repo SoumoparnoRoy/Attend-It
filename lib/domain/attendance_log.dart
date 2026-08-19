@@ -18,6 +18,7 @@ class AttendanceLogEntry {
     required this.status,
     this.endMinutes,
     this.room,
+    this.tagId,
     this.isOrphaned = false,
   });
 
@@ -29,6 +30,10 @@ class AttendanceLogEntry {
   final String? room;
 
   final AttendanceStatus? status;
+
+  /// The mark's tag, carried so correcting a status here does not silently
+  /// drop it — `setAttendance` replaces the whole row.
+  final int? tagId;
 
   /// A mark with no matching scheduled occurrence.
   ///
@@ -82,6 +87,7 @@ List<AttendanceLogEntry> buildAttendanceLog({
         endMinutes: session.endMinutes,
         room: session.room,
         status: bySubjectKey[key]?.status,
+        tagId: bySubjectKey[key]?.tagId,
       ),
     );
   }
@@ -94,6 +100,7 @@ List<AttendanceLogEntry> buildAttendanceLog({
         date: record.date,
         startMinutes: record.startMinutes,
         status: record.status,
+        tagId: record.tagId,
         isOrphaned: true,
       ),
     );

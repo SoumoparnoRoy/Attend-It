@@ -19,6 +19,8 @@ class SessionCard extends StatelessWidget {
     this.onLongPress,
     this.showDate = false,
     this.categoryName,
+    this.tagName,
+    this.onTag,
   });
 
   final ClassSession session;
@@ -29,6 +31,15 @@ class SessionCard extends StatelessWidget {
 
   /// Category label (Lab, Theory, ...) shown as a pill, when the subject has one.
   final String? categoryName;
+
+  /// The mark's tag, already resolved to a name. Passed in rather than looked
+  /// up here for the same reason as [categoryName] — the card stays a plain
+  /// widget with no data layer behind it.
+  final String? tagName;
+
+  /// Opens the tag picker. Null when there are no tags to choose from, which
+  /// is how the control stays invisible until Settings has one.
+  final VoidCallback? onTag;
 
   @override
   Widget build(BuildContext context) {
@@ -141,8 +152,13 @@ class SessionCard extends StatelessWidget {
                                 ),
                               if (session.isExtra)
                                 Pill(
-                                  label: 'Extra',
-                                  icon: Icons.add_rounded,
+                                  label: 'One-off',
+                                  icon: Icons.looks_one_outlined,
+                                  color: context.palette.cyan,
+                                ),
+                              if (tagName != null && tagName!.isNotEmpty)
+                                Pill(
+                                  label: '+$tagName',
                                   color: context.palette.cyan,
                                 ),
                             ],
@@ -174,6 +190,13 @@ class SessionCard extends StatelessWidget {
                     ),
                     if (option != AttendanceStatus.values.last)
                       const SizedBox(width: AppSpacing.sm),
+                  ],
+                  // Only once the class is marked: a tag labels a mark, so
+                  // offering one on an unmarked class would have nothing to
+                  // attach to. Marking itself stays a single tap.
+                  if (onTag != null && session.isMarked) ...<Widget>[
+                    const SizedBox(width: AppSpacing.sm),
+                    _TagButton(active: tagName != null, onTap: onTag!),
                   ],
                 ],
               ),
@@ -237,6 +260,48 @@ class _StatusButton extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TagButton extends StatelessWidget {
+  const _TagButton({required this.active, required this.onTap});
+
+  /// Whether a tag is already set. Kept to an icon either way: the tag's name
+  /// is already on the line above, and repeating it here would push the three
+  /// status buttons into ellipsis on a narrow phone.
+  final bool active;
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color accent = context.palette.cyan;
+    return Material(
+      color: active
+          ? accent.withValues(alpha: 0.18)
+          : context.palette.surfaceHigh,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+            border: Border.all(
+              color: active
+                  ? accent.withValues(alpha: 0.6)
+                  : context.palette.outlineSoft,
+            ),
+          ),
+          child: Icon(
+            Icons.sell_outlined,
+            size: 16,
+            color: active ? accent : context.palette.textTertiary,
           ),
         ),
       ),

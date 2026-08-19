@@ -185,6 +185,8 @@ class _LogTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AppPalette p = context.palette;
+    final String? tagName =
+        ref.watch(timetableProvider).value?.tagById(entry.tagId)?.name;
 
     final String time = entry.endMinutes == null
         ? Clock.format(entry.startMinutes, use24Hour: use24Hour)
@@ -229,6 +231,7 @@ class _LogTile extends ConsumerWidget {
                           time,
                           if (entry.room != null && entry.room!.isNotEmpty)
                             entry.room!,
+                          if (tagName != null) '+$tagName',
                         ].join(' · '),
                         style: TextStyle(
                           fontSize: 12.5,
@@ -244,12 +247,16 @@ class _LogTile extends ConsumerWidget {
                     child: _StatusToggle(
                       status: status,
                       selected: entry.status == status,
+                      // Same reason as the Today card: the row is replaced on
+                      // write, so the tag has to be handed back or correcting
+                      // Present to Absent would quietly strip it.
                       onTap: () => ref.read(actionsProvider).setStatusAt(
                             subjectId: subjectId,
                             date: entry.date,
                             startMinutes: entry.startMinutes,
                             current: entry.status,
                             status: status,
+                            tagId: entry.tagId,
                           ),
                     ),
                   ),

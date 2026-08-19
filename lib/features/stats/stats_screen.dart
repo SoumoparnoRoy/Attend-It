@@ -4,7 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/app_theme.dart';
 import '../../data/models/subject.dart';
 import '../../data/settings/app_settings.dart';
+import '../../core/date_utils.dart';
+import '../../data/models/attendance_status.dart';
 import '../../domain/attendance_stats.dart';
+import '../../domain/tag_stats.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
 import '../subjects/attendance_log_screen.dart';
@@ -19,6 +22,13 @@ class StatsScreen extends ConsumerWidget {
     final OverallStats stats = ref.watch(statsProvider);
     final AppSettings settings =
         ref.watch(settingsProvider).value ?? const AppSettings();
+    // Tags with nothing on them are dropped here rather than in the provider:
+    // Settings still needs to list an unused tag, this screen does not.
+    final List<TagBreakdown> tagged = ref
+        .watch(tagBreakdownsProvider)
+        .where((TagBreakdown b) => !b.isEmpty)
+        .toList();
+    final bool hasTags = tagged.isNotEmpty;
 
     return Scaffold(
       body: SafeArea(
@@ -81,11 +91,11 @@ class StatsScreen extends ConsumerWidget {
                 ),
               ),
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
+                padding: EdgeInsets.fromLTRB(
                   AppSpacing.lg,
                   0,
                   AppSpacing.lg,
-                  100,
+                  hasTags ? AppSpacing.xl : 100,
                 ),
                 sliver: SliverList.separated(
                   itemCount: stats.subjects.length,
@@ -101,6 +111,43 @@ class StatsScreen extends ConsumerWidget {
                   },
                 ),
               ),
+
+              // Only once something is actually tagged. An install that never
+              // opens the Tags setting never learns this section exists, which
+              // is the point — the screen it replaces was already full.
+              if (hasTags) ...<Widget>[
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    0,
+                    AppSpacing.lg,
+                    0,
+                  ),
+                  sliver: const SliverToBoxAdapter(
+                    child: SectionHeader('By tag'),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    0,
+                    AppSpacing.lg,
+                    100,
+                  ),
+                  sliver: SliverList.separated(
+                    itemCount: tagged.length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: AppSpacing.md),
+                    itemBuilder: (BuildContext context, int index) {
+                      final TagBreakdown breakdown = tagged[index];
+                      return _TagCard(
+                        breakdown: breakdown,
+                        use24Hour: settings.use24HourTime,
+                      );
+                    },
+                  ),
+                ),
+              ],
             ],
           ],
         ),
@@ -628,6 +675,172 @@ class _MetricTile extends StatelessWidget {
               fontWeight: FontWeight.w600,
               color: context.palette.textTertiary,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One tag on the stats screen: what it is, how it is split, and how far it
+/// reaches across subjects.
+///
+/// No percentage, on purpose. A tag has no target behind it, so a figure like
+/// "Proxy 62%" would read as a score against something that does not exist.
+/// The classes themselves are one tap away rather than listed inline, which is
+/// what keeps a heavily-used tag from burying the subjects above it.
+class _TagCard extends StatelessWidget {
+  const _TagCard({required this.breakdown, required this.use24Hour});
+
+  final TagBreakdown breakdown;
+  final bool use24Hour;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color accent = context.palette.cyan;
+    return SurfaceCard(
+      onTap: () => _showDetail(context),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+            ),
+            child: Icon(Icons.sell_outlined, size: 18, color: accent),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  breakdown.tag.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  breakdown.summary,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: context.palette.textTertiary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text(
+            '${breakdown.total}',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+              color: accent,
+            ),
+          ),
+          const SizedBox(width: 2),
+          Icon(
+            Icons.chevron_right_rounded,
+            size: 18,
+            color: context.palette.textTertiary,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showDetail(BuildContext context) {
+    return showAppSheet<void>(
+      context: context,
+      title: breakdown.tag.name,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            breakdown.subjectCount == 1
+                ? '${breakdown.countLabel} in one subject · ${breakdown.summary}'
+                : '${breakdown.countLabel} across ${breakdown.subjectCount} '
+                    'subjects · ${breakdown.summary}',
+            style: TextStyle(
+              fontSize: 12.5,
+              height: 1.4,
+              color: context.palette.textTertiary,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          for (final TaggedMark mark in breakdown.marks)
+            _TaggedMarkRow(mark: mark, use24Hour: use24Hour),
+        ],
+      ),
+    );
+  }
+}
+
+class _TaggedMarkRow extends StatelessWidget {
+  const _TaggedMarkRow({required this.mark, required this.use24Hour});
+
+  final TaggedMark mark;
+  final bool use24Hour;
+
+  @override
+  Widget build(BuildContext context) {
+    final AttendanceStatus status = mark.status;
+    final Color statusColor = status.colorIn(context.palette);
+    // A subject can only be missing on a hand-edited import; showing the row
+    // anyway keeps the count above honest instead of silently disagreeing.
+    final String subjectName = mark.subject?.name ?? 'Deleted subject';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 3,
+            height: 30,
+            decoration: BoxDecoration(
+              color: mark.subject?.color ?? context.palette.outlineSoft,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  subjectName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  '${Dates.formatDayMonth(mark.record.date)} · '
+                  '${Clock.format(mark.record.startMinutes, use24Hour: use24Hour)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.palette.textTertiary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Pill(
+            label: status.label,
+            icon: status.icon,
+            color: statusColor,
           ),
         ],
       ),

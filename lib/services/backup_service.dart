@@ -13,6 +13,7 @@ import '../data/models/extra_class.dart';
 import '../data/models/holiday.dart';
 import '../data/models/room.dart';
 import '../data/models/subject.dart';
+import '../data/models/tag.dart';
 import '../data/settings/app_settings.dart';
 
 /// Result of an import attempt.
@@ -39,10 +40,10 @@ class BackupService {
   final SettingsService _settingsService;
 
   /// v2 added class categories, v3 the saved room list and the day-grid
-  /// settings. Older backups still import: a missing key just means that
-  /// feature was unused when the file was written, which is exactly what an
-  /// empty list or a zero block length already mean.
-  static const int formatVersion = 3;
+  /// settings, v4 attendance tags. Older backups still import: a missing key
+  /// just means that feature was unused when the file was written, which is
+  /// exactly what an empty list or a zero block length already mean.
+  static const int formatVersion = 4;
 
   /// Written into every export so an import can tell our files from anything
   /// else pasted in.
@@ -64,6 +65,7 @@ class BackupService {
   Future<Map<String, Object?>> buildBackup() async {
     final List<ClassCategory> categories = await _repo.getCategories();
     final List<Room> rooms = await _repo.getRooms();
+    final List<Tag> tags = await _repo.getTags();
     final List<Subject> subjects = await _repo.getSubjects();
     final List<ClassSlot> slots = await _repo.getSlots();
     final List<ExtraClass> extras = await _repo.getExtraClasses();
@@ -79,6 +81,7 @@ class BackupService {
       'categories':
           categories.map((ClassCategory c) => c.toMap()).toList(),
       'rooms': rooms.map((Room r) => r.toMap()).toList(),
+      'tags': tags.map((Tag t) => t.toMap()).toList(),
       'subjects': subjects.map((Subject s) => s.toMap()).toList(),
       'slots': slots.map((ClassSlot s) => s.toMap()).toList(),
       'extraClasses': extras.map((ExtraClass e) => e.toMap()).toList(),
@@ -147,9 +150,10 @@ class BackupService {
     try {
       await _repo.clearAll();
 
-      // Old id -> newly assigned id, for both categories and subjects.
+      // Old id -> newly assigned id, for categories, subjects and tags.
       final Map<int, int> categoryIdMap = <int, int>{};
       final Map<int, int> subjectIdMap = <int, int>{};
+      final Map<int, int> tagIdMap = <int, int>{};
 
       for (final Object? raw in (data['categories'] as List<Object?>?) ??
           const <Object?>[]) {
@@ -173,6 +177,18 @@ class BackupService {
         if (raw is! Map) continue;
         final Room room = Room.fromMap(Map<String, Object?>.from(raw));
         await _repo.insertRoom(Room(name: room.name));
+      }
+
+      // Tags do need remapping — `attendance.tag_id` points at one. Restored
+      // before the marks that reference them, so the ids exist by then.
+      for (final Object? raw in (data['tags'] as List<Object?>?) ??
+          const <Object?>[]) {
+        if (raw is! Map) continue;
+        final Map<String, Object?> map = Map<String, Object?>.from(raw);
+        final int? oldId = (map['id'] as num?)?.toInt();
+        final Tag tag = Tag.fromMap(map);
+        final int newId = await _repo.insertTag(Tag(name: tag.name));
+        if (oldId != null) tagIdMap[oldId] = newId;
       }
 
       for (final Object? raw in (data['subjects'] as List<Object?>?) ??
@@ -251,6 +267,10 @@ class BackupService {
             date: record.date,
             startMinutes: record.startMinutes,
             status: record.status,
+            // An unknown tag id drops to null rather than failing the import.
+            // The mark is the data worth keeping; the label is not worth
+            // rejecting a whole backup over.
+            tagId: record.tagId == null ? null : tagIdMap[record.tagId],
             note: record.note,
             markedAt: record.markedAt,
           ),

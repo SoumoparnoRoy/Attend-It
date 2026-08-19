@@ -176,6 +176,8 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.xl),
             const RoomsSection(),
             const SizedBox(height: AppSpacing.xl),
+            const TagsSection(),
+            const SizedBox(height: AppSpacing.xl),
 
             // ------------------------------------------------ class lengths
             SectionHeader(

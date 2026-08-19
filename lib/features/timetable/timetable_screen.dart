@@ -427,7 +427,7 @@ class _CompactSessionRow extends StatelessWidget {
           if (session.isExtra)
             Padding(
               padding: EdgeInsets.only(left: AppSpacing.sm),
-              child: Pill(label: 'Extra', color: context.palette.cyan),
+              child: Pill(label: 'One-off', color: context.palette.cyan),
             ),
           if (status != null)
             Padding(

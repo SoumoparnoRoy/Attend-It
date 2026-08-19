@@ -14,7 +14,7 @@ class AppDatabase {
   // install finds its data, so renaming it would strand every database in
   // place and read as a wipe. It is never shown to the user.
   static const String fileName = 'attend_it.db';
-  static const int schemaVersion = 3;
+  static const int schemaVersion = 4;
 
   Database? _db;
 
@@ -52,6 +52,14 @@ class AppDatabase {
           // that never opens the new screen behaves exactly as before.
           await db.execute(_roomsTable);
         }
+        if (oldVersion < 4) {
+          // v4 added attendance tags. The column is nullable with no default,
+          // so every existing mark reads as untagged — which is what it is.
+          // Nothing is seeded: the three statuses already cover the common
+          // case and an empty tag list costs nothing on screen.
+          await db.execute(_tagsTable);
+          await db.execute('ALTER TABLE attendance ADD COLUMN tag_id INTEGER');
+        }
       },
     );
   }
@@ -70,6 +78,15 @@ class AppDatabase {
   /// v3 migration so the two cannot drift.
   static const String _roomsTable = '''
       CREATE TABLE rooms (
+        id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        name     TEXT    NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0
+      )
+    ''';
+
+  /// Same reasoning as the two tables above.
+  static const String _tagsTable = '''
+      CREATE TABLE tags (
         id       INTEGER PRIMARY KEY AUTOINCREMENT,
         name     TEXT    NOT NULL,
         position INTEGER NOT NULL DEFAULT 0
@@ -99,6 +116,7 @@ class AppDatabase {
 
     batch.execute(_categoriesTable);
     batch.execute(_roomsTable);
+    batch.execute(_tagsTable);
 
     batch.execute('''
       CREATE TABLE subjects (
@@ -151,10 +169,12 @@ class AppDatabase {
         date          INTEGER NOT NULL,
         start_minutes INTEGER NOT NULL,
         status        TEXT    NOT NULL,
+        tag_id        INTEGER,
         note          TEXT,
         marked_at     INTEGER NOT NULL,
         UNIQUE (subject_id, date, start_minutes) ON CONFLICT REPLACE,
-        FOREIGN KEY (subject_id) REFERENCES subjects (id) ON DELETE CASCADE
+        FOREIGN KEY (subject_id) REFERENCES subjects (id) ON DELETE CASCADE,
+        FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE SET NULL
       )
     ''');
 
@@ -196,6 +216,7 @@ class AppDatabase {
     batch.delete('subjects');
     batch.delete('categories');
     batch.delete('rooms');
+    batch.delete('tags');
     await batch.commit(noResult: true);
   }
 }

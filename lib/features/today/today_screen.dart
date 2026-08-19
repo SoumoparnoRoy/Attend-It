@@ -6,12 +6,14 @@ import '../../core/date_utils.dart';
 import '../../data/models/attendance_status.dart';
 import '../../data/models/class_session.dart';
 import '../../data/models/holiday.dart';
+import '../../data/models/tag.dart';
 import '../../data/settings/app_settings.dart';
 import '../../domain/attendance_stats.dart';
 import '../../domain/schedule_engine.dart';
 import '../../services/notification_service.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
+import '../../widgets/tag_picker.dart';
 import '../subjects/class_editor_sheets.dart';
 import '../timetable/week_grid_view.dart';
 import 'session_card.dart';
@@ -245,13 +247,18 @@ class TodayScreen extends ConsumerWidget {
                       const SizedBox(height: AppSpacing.md),
                   itemBuilder: (BuildContext context, int index) {
                     final ClassSession session = sessions[index];
+                    final List<Tag> tags = data?.tags ?? const <Tag>[];
                     return SessionCard(
                       session: session,
                       use24Hour: settings.use24HourTime,
                       categoryName: data?.categoryFor(session.subject)?.name,
+                      tagName: data?.tagById(session.record?.tagId)?.name,
                       onMark: (AttendanceStatus status) => ref
                           .read(actionsProvider)
                           .mark(session, status),
+                      onTag: tags.isEmpty
+                          ? null
+                          : () => _pickTag(context, ref, session, tags),
                       onLongPress: () =>
                           showSessionOptions(context, ref, session),
                     );
@@ -269,6 +276,32 @@ class TodayScreen extends ConsumerWidget {
         label: const Text('Add class'),
       ),
     );
+  }
+
+  /// Opens the tag picker for one marked class and writes the result.
+  ///
+  /// The toggle lives in `setTagAt`, so tapping the tag a class already has
+  /// clears it here without this screen knowing the rule.
+  Future<void> _pickTag(
+    BuildContext context,
+    WidgetRef ref,
+    ClassSession session,
+    List<Tag> tags,
+  ) async {
+    final int? subjectId = session.subject.id;
+    if (subjectId == null) return;
+    final int? chosen = await showTagPicker(
+      context,
+      tags: tags,
+      selected: session.record?.tagId,
+    );
+    if (chosen == null) return;
+    await ref.read(actionsProvider).setTagAt(
+          subjectId: subjectId,
+          date: session.date,
+          startMinutes: session.startMinutes,
+          tagId: chosen,
+        );
   }
 
   Future<void> _markAllPresent(

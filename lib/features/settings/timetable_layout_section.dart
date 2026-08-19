@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/app_theme.dart';
 import '../../core/date_utils.dart';
 import '../../data/models/room.dart';
+import '../../data/models/tag.dart';
 import '../../data/settings/app_settings.dart';
 import '../../domain/day_grid.dart';
 import '../../state/providers.dart';
@@ -393,6 +394,200 @@ class _RoomChip extends StatelessWidget {
                 constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                 color: context.palette.textTertiary,
                 tooltip: 'Forget ${room.name}',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The user's attendance labels, managed the same way rooms are.
+///
+/// Deleting one is the only place this differs: a room is copied into a class
+/// as text, so forgetting it changes nothing, while a tag is referenced by id
+/// and marks point at it. So a tag in use says how many marks it would strip
+/// before it goes.
+class TagsSection extends ConsumerWidget {
+  const TagsSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final List<Tag> tags = ref.watch(timetableProvider).value?.tags ?? <Tag>[];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        SectionHeader(
+          'Tags',
+          trailing: TextButton.icon(
+            onPressed: () => _addTag(context, ref),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Add'),
+          ),
+        ),
+        if (tags.isEmpty)
+          SurfaceCard(
+            child: Text(
+              'A tag records how a class went, next to Present or Absent — '
+              '"Proxy", "Online", "Makeup". Marking works exactly as it does '
+              'now; a tag is optional and added afterwards.',
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.4,
+                color: context.palette.textTertiary,
+              ),
+            ),
+          )
+        else
+          SurfaceCard(
+            child: Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: <Widget>[
+                for (final Tag tag in tags)
+                  _TagChip(
+                    tag: tag,
+                    onRename: () => _renameTag(context, ref, tag),
+                    onDelete: () => _confirmDelete(context, ref, tag),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _addTag(BuildContext context, WidgetRef ref) async {
+    final String? name = await _promptTagName(context, title: 'Add a tag');
+    if (name == null) return;
+    await ref.read(actionsProvider).addTag(Tag(name: name));
+  }
+
+  Future<void> _renameTag(
+    BuildContext context,
+    WidgetRef ref,
+    Tag tag,
+  ) async {
+    final String? name = await _promptTagName(
+      context,
+      title: 'Rename tag',
+      initial: tag.name,
+    );
+    if (name == null) return;
+    await ref.read(actionsProvider).updateTag(tag.copyWith(name: name));
+  }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    Tag tag,
+  ) async {
+    final int id = tag.id!;
+    final int inUse = await ref.read(actionsProvider).countMarksWithTag(id);
+    if (!context.mounted) return;
+
+    if (inUse == 0) {
+      await ref.read(actionsProvider).deleteTag(id);
+      return;
+    }
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        title: Text('Delete ${tag.name}?'),
+        content: Text(
+          inUse == 1
+              ? 'One class is tagged ${tag.name}. It keeps its Present or '
+                  'Absent mark and simply loses the tag.'
+              : '$inUse classes are tagged ${tag.name}. They keep their '
+                  'Present or Absent marks and simply lose the tag.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref.read(actionsProvider).deleteTag(id);
+  }
+}
+
+Future<String?> _promptTagName(
+  BuildContext context, {
+  required String title,
+  String initial = '',
+}) {
+  return showAppSheet<String>(
+    context: context,
+    title: title,
+    child: SheetTextForm(
+      initial: initial,
+      submitLabel: 'Save',
+      labelText: 'Tag',
+      hintText: 'e.g. Proxy, Online, Makeup',
+      textCapitalization: TextCapitalization.words,
+    ),
+  );
+}
+
+class _TagChip extends StatelessWidget {
+  const _TagChip({
+    required this.tag,
+    required this.onRename,
+    required this.onDelete,
+  });
+
+  final Tag tag;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: context.palette.surfaceHigher,
+      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+      child: InkWell(
+        onTap: onRename,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        child: Container(
+          padding: const EdgeInsets.only(left: 12, top: 4, bottom: 4, right: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+            border: Border.all(color: context.palette.outlineSoft),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(
+                Icons.sell_outlined,
+                size: 15,
+                color: context.palette.textTertiary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                tag.name,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              IconButton(
+                onPressed: onDelete,
+                icon: const Icon(Icons.close_rounded, size: 15),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                color: context.palette.textTertiary,
+                tooltip: 'Delete ${tag.name}',
               ),
             ],
           ),

@@ -11,11 +11,13 @@ import '../data/models/extra_class.dart';
 import '../data/models/holiday.dart';
 import '../data/models/room.dart';
 import '../data/models/subject.dart';
+import '../data/models/tag.dart';
 import '../data/settings/app_settings.dart';
 import '../domain/attendance_log.dart';
 import '../domain/attendance_stats.dart';
 import '../domain/day_grid.dart';
 import '../domain/schedule_engine.dart';
+import '../domain/tag_stats.dart';
 import '../services/backup_service.dart';
 import '../services/notification_service.dart';
 
@@ -87,6 +89,7 @@ class TimetableData {
     required this.holidays,
     required this.records,
     this.rooms = const <Room>[],
+    this.tags = const <Tag>[],
   });
 
   final List<ClassCategory> categories;
@@ -96,6 +99,10 @@ class TimetableData {
   /// this is a suggestion list rather than timetable structure — nothing breaks
   /// when it is empty, which is also how every pre-v3 install starts.
   final List<Room> rooms;
+
+  /// The user's attendance labels. Defaulted for the same reason as [rooms]:
+  /// it is optional vocabulary, and every pre-v4 install starts with none.
+  final List<Tag> tags;
 
   final List<ClassSlot> slots;
   final List<ExtraClass> extras;
@@ -121,6 +128,14 @@ class TimetableData {
     return null;
   }
 
+  Tag? tagById(int? id) {
+    if (id == null) return null;
+    for (final Tag tag in tags) {
+      if (tag.id == id) return tag;
+    }
+    return null;
+  }
+
   Subject? subjectById(int? id) {
     if (id == null) return null;
     for (final Subject subject in subjects) {
@@ -142,6 +157,7 @@ final timetableProvider = FutureProvider<TimetableData>((ref) async {
   final List<Holiday> holidays = await repo.getHolidays();
   final List<AttendanceRecord> records = await repo.getAttendance();
   final List<Room> rooms = await repo.getRooms();
+  final List<Tag> tags = await repo.getTags();
   return TimetableData(
     categories: categories,
     subjects: subjects,
@@ -150,6 +166,7 @@ final timetableProvider = FutureProvider<TimetableData>((ref) async {
     holidays: holidays,
     records: records,
     rooms: rooms,
+    tags: tags,
   );
 });
 
@@ -300,6 +317,30 @@ final subjectStatsProvider =
     if (s.subject.id == subjectId) return s;
   }
   return null;
+});
+
+// ------------------------------------------------------------------- tags
+
+/// Every tag with the marks carrying it.
+///
+/// Derived from the records already in memory rather than queried, so it
+/// refreshes with the same `timetableProvider` invalidation as everything else
+/// and cannot fall out of step with the stats beside it.
+final tagBreakdownsProvider = Provider<List<TagBreakdown>>((ref) {
+  final TimetableData? data = ref.watch(timetableProvider).value;
+  if (data == null) return const <TagBreakdown>[];
+  return buildTagBreakdowns(
+    tags: data.tags,
+    records: data.records,
+    subjects: data.subjects,
+  );
+});
+
+/// Whether anything is tagged at all. The stats screen hides its tag section
+/// on this, so an install that never opens Settings never sees the feature.
+final hasTaggedMarksProvider = Provider<bool>((ref) {
+  final List<TagBreakdown> breakdowns = ref.watch(tagBreakdownsProvider);
+  return breakdowns.any((TagBreakdown b) => !b.isEmpty);
 });
 
 // ---------------------------------------------------------- attendance log
@@ -585,6 +626,26 @@ class TimetableActions {
     await _refresh();
   }
 
+  // tags --------------------------------------------------------------------
+
+  Future<int> addTag(Tag tag) async {
+    final int id = await _repo.insertTag(tag);
+    await _refresh();
+    return id;
+  }
+
+  Future<void> updateTag(Tag tag) async {
+    await _repo.updateTag(tag);
+    await _refresh();
+  }
+
+  Future<void> deleteTag(int id) async {
+    await _repo.deleteTag(id);
+    await _refresh();
+  }
+
+  Future<int> countMarksWithTag(int id) => _repo.countMarksWithTag(id);
+
   // attendance -------------------------------------------------------------
 
   /// Marks one occurrence. Tapping the status it already has clears the mark,
@@ -598,6 +659,12 @@ class TimetableActions {
       startMinutes: session.startMinutes,
       current: session.status,
       status: status,
+      // Carried across a status change on purpose. `setAttendance` replaces the
+      // row, so without this, correcting Present to Absent would silently drop
+      // the tag — and the tag describes the class, not the verdict. Clearing
+      // the mark still takes the tag with it, which is the one case where the
+      // occurrence genuinely has nothing left to label.
+      tagId: session.record?.tagId,
     );
   }
 
@@ -613,6 +680,7 @@ class TimetableActions {
     required int startMinutes,
     required AttendanceStatus? current,
     required AttendanceStatus status,
+    int? tagId,
   }) async {
     if (current == status) {
       await clearStatusAt(
@@ -628,8 +696,36 @@ class TimetableActions {
         date: date,
         startMinutes: startMinutes,
         status: status,
+        tagId: tagId,
         markedAt: DateTime.now(),
       ),
+    );
+    await _refresh();
+  }
+
+  /// Attaches or removes the tag on a marked occurrence, leaving the status
+  /// alone. Passing the tag it already has clears it, same as the status
+  /// buttons.
+  ///
+  /// Reads the record first because `setAttendance` replaces the whole row — a
+  /// record built from a tag alone would drop the status and the mark time.
+  Future<void> setTagAt({
+    required int subjectId,
+    required DateTime date,
+    required int startMinutes,
+    required int? tagId,
+  }) async {
+    final AttendanceRecord? current = await _repo.getAttendanceAt(
+      subjectId,
+      date,
+      startMinutes,
+    );
+    // Nothing to tag: a tag describes a mark, so there is no meaning in one
+    // floating on an unmarked class.
+    if (current == null) return;
+    final bool clearing = tagId == null || current.tagId == tagId;
+    await _repo.setAttendance(
+      current.copyWith(tagId: clearing ? null : tagId, clearTag: clearing),
     );
     await _refresh();
   }

@@ -9,6 +9,7 @@ import '../models/extra_class.dart';
 import '../models/holiday.dart';
 import '../models/room.dart';
 import '../models/subject.dart';
+import '../models/tag.dart';
 import 'app_database.dart';
 
 /// Single entry point for all persistence.
@@ -110,6 +111,59 @@ class ZeoliteRepository {
   Future<void> deleteRoom(int id) async {
     final Database db = await _db;
     await db.delete('rooms', where: 'id = ?', whereArgs: <Object?>[id]);
+  }
+
+  // -------------------------------------------------------------------- tags
+
+  Future<List<Tag>> getTags() async {
+    final Database db = await _db;
+    final List<Map<String, Object?>> rows = await db.query(
+      'tags',
+      orderBy: 'position ASC, name COLLATE NOCASE ASC',
+    );
+    return rows.map(Tag.fromMap).toList();
+  }
+
+  Future<int> insertTag(Tag tag) async {
+    final Database db = await _db;
+    final List<Map<String, Object?>> rows =
+        await db.rawQuery('SELECT MAX(position) AS m FROM tags');
+    final int next = ((rows.first['m'] as int?) ?? -1) + 1;
+    return db.insert('tags', tag.copyWith(position: next).toMap());
+  }
+
+  /// Renaming reaches every mark at once, which is the whole reason marks
+  /// store a tag id rather than a copy of its name.
+  Future<void> updateTag(Tag tag) async {
+    if (tag.id == null) return;
+    final Database db = await _db;
+    await db.update(
+      'tags',
+      tag.toMap(),
+      where: 'id = ?',
+      whereArgs: <Object?>[tag.id],
+    );
+  }
+
+  /// The marks themselves survive — `attendance.tag_id` is `ON DELETE SET
+  /// NULL`, so they go back to being untagged rather than disappearing. Same
+  /// reasoning as deleting a weekly class leaving its attendance behind: the
+  /// class was still attended, and removing a label is not a reason to forget
+  /// that.
+  Future<void> deleteTag(int id) async {
+    final Database db = await _db;
+    await db.delete('tags', where: 'id = ?', whereArgs: <Object?>[id]);
+  }
+
+  /// How many marks carry [tagId]. The Settings delete prompt says this out
+  /// loud, so removing a tag in use is a decision rather than a surprise.
+  Future<int> countMarksWithTag(int tagId) async {
+    final Database db = await _db;
+    final List<Map<String, Object?>> rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM attendance WHERE tag_id = ?',
+      <Object?>[tagId],
+    );
+    return (rows.first['c'] as int?) ?? 0;
   }
 
   // ---------------------------------------------------------------- subjects
@@ -254,6 +308,26 @@ class ZeoliteRepository {
       whereArgs: <Object?>[Dates.keyOf(from), Dates.keyOf(to)],
     );
     return rows.map(AttendanceRecord.fromMap).toList();
+  }
+
+  /// The mark on one occurrence, or null when it is unmarked.
+  ///
+  /// Needed because [setAttendance] replaces the whole row: anything editing
+  /// one field of a mark has to read the rest of it first.
+  Future<AttendanceRecord?> getAttendanceAt(
+    int subjectId,
+    DateTime date,
+    int startMinutes,
+  ) async {
+    final Database db = await _db;
+    final List<Map<String, Object?>> rows = await db.query(
+      'attendance',
+      where: 'subject_id = ? AND date = ? AND start_minutes = ?',
+      whereArgs: <Object?>[subjectId, Dates.keyOf(date), startMinutes],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return AttendanceRecord.fromMap(rows.first);
   }
 
   /// Inserts or replaces the mark for one occurrence. The unique index on
