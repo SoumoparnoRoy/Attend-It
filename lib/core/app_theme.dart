@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -17,14 +19,21 @@ class AppPalette extends ThemeExtension<AppPalette> {
     required this.surface,
     required this.surfaceHigh,
     required this.surfaceHigher,
+    required this.navSurface,
     required this.outline,
     required this.outlineSoft,
+    required this.hairline,
     required this.accent,
     required this.accentSoft,
     required this.cyan,
+    required this.gradientTop,
+    required this.gradientMid,
+    required this.gradientBottom,
+    required this.cardShadow,
     required this.textPrimary,
     required this.textSecondary,
     required this.textTertiary,
+    required this.textFaint,
     required this.present,
     required this.absent,
     required this.cancelled,
@@ -37,16 +46,40 @@ class AppPalette extends ThemeExtension<AppPalette> {
   final Color surface;
   final Color surfaceHigh;
   final Color surfaceHigher;
+
+  /// The bottom navigation bar, which sits a step away from the canvas in both
+  /// themes so the tab row reads as chrome rather than as more content.
+  final Color navSurface;
+
   final Color outline;
   final Color outlineSoft;
+
+  /// The one-pixel rule under a day group heading. Lighter than [outlineSoft]
+  /// because it divides a list rather than enclosing a shape.
+  final Color hairline;
 
   final Color accent;
   final Color accentSoft;
   final Color cyan;
 
+  /// The violet block that bleeds from the top of every screen. Three stops
+  /// rather than two: the tall Today header needs the extra depth at the
+  /// bottom, and the shorter headers simply stop before reaching it.
+  final Color gradientTop;
+  final Color gradientMid;
+  final Color gradientBottom;
+
+  /// Card elevation. Transparent in dark, where a lighter fill does the work a
+  /// shadow cannot do against near-black.
+  final Color cardShadow;
+
   final Color textPrimary;
   final Color textSecondary;
   final Color textTertiary;
+
+  /// The faintest usable grey — placeholder rows, chevrons, a weekend column.
+  /// Never body text; it does not meet AA and is not meant to.
+  final Color textFaint;
 
   final Color present;
   final Color absent;
@@ -55,27 +88,62 @@ class AppPalette extends ThemeExtension<AppPalette> {
 
   bool get isDark => brightness == Brightness.dark;
 
-  /// The original near-black canvas with layered surfaces for elevation.
+  /// The gradient itself, angled the same way on every screen so the headers
+  /// look like one object seen at different heights.
+  LinearGradient get headerGradient => LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: <Color>[gradientTop, gradientMid, gradientBottom],
+        stops: const <double>[0, 0.62, 1],
+      );
+
+  /// The same violet as a compact fill for buttons and the FAB, where the
+  /// three-stop version has no room to develop.
+  LinearGradient get accentGradient => LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: <Color>[gradientTop, gradientMid],
+      );
+
+  List<BoxShadow> get cardElevation => cardShadow.a == 0
+      ? const <BoxShadow>[]
+      : <BoxShadow>[
+          BoxShadow(
+            color: cardShadow,
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ];
+
+  /// Near-black canvas with layered surfaces for elevation, and a deeper,
+  /// less luminous gradient — the light one glows uncomfortably at night.
   static const AppPalette dark = AppPalette(
     brightness: Brightness.dark,
-    canvas: Color(0xFF0A0A0E),
-    surface: Color(0xFF121218),
-    surfaceHigh: Color(0xFF1A1A23),
+    canvas: Color(0xFF0B0B11),
+    surface: Color(0xFF16161F),
+    surfaceHigh: Color(0xFF1E1E28),
     surfaceHigher: Color(0xFF23232E),
+    navSurface: Color(0xFF13131A),
     outline: Color(0xFF2C2C39),
-    outlineSoft: Color(0xFF1F1F29),
-    accent: Color(0xFF7C6BFF),
-    accentSoft: Color(0xFF2A2352),
+    outlineSoft: Color(0xFF23232E),
+    hairline: Color(0xFF23232E),
+    accent: Color(0xFFA28FFF),
+    accentSoft: Color(0xFF2A2542),
     cyan: Color(0xFF4FD6D2),
+    gradientTop: Color(0xFF5B45E8),
+    gradientMid: Color(0xFF3F27B8),
+    gradientBottom: Color(0xFF241463),
+    cardShadow: Color(0x00000000),
     textPrimary: Color(0xFFF2F2F7),
     textSecondary: Color(0xFFA3A3B2),
-    textTertiary: Color(0xFF6E6E80),
+    textTertiary: Color(0xFF7E7E92),
+    textFaint: Color(0xFF5E5E70),
     present: Color(0xFF3DD68C),
     absent: Color(0xFFE87C7C),
-    cancelled: Color(0xFF8A8A9E),
+    cancelled: Color(0xFF8B8B9E),
     // A muted sand rather than alarm-orange: "tight" means pay attention, not
     // panic, and this colour fills a whole meter bar.
-    warning: Color(0xFFDFB57C),
+    warning: Color(0xFFFFCE85),
   );
 
   /// Light is not an inversion of dark. Elevation runs the other way — the
@@ -84,25 +152,32 @@ class AppPalette extends ThemeExtension<AppPalette> {
   /// a white card rather than glowing on black.
   static const AppPalette light = AppPalette(
     brightness: Brightness.light,
-    canvas: Color(0xFFF4F4F8),
+    canvas: Color(0xFFF3F4FB),
     surface: Color(0xFFFFFFFF),
-    surfaceHigh: Color(0xFFF7F7FB),
-    surfaceHigher: Color(0xFFEDEDF3),
+    surfaceHigh: Color(0xFFF3F4FB),
+    surfaceHigher: Color(0xFFEDECF3),
+    navSurface: Color(0xFFFFFFFF),
     outline: Color(0xFFDCDCE6),
-    outlineSoft: Color(0xFFE9E9F0),
-    accent: Color(0xFF5B45E0),
-    accentSoft: Color(0xFFE8E4FF),
+    outlineSoft: Color(0xFFEDECF3),
+    hairline: Color(0xFFE2E1EC),
+    accent: Color(0xFF6C4CF0),
+    accentSoft: Color(0xFFEDE8FE),
     cyan: Color(0xFF0E9B96),
+    gradientTop: Color(0xFF7B5CFF),
+    gradientMid: Color(0xFF5B3BE8),
+    gradientBottom: Color(0xFF4B2FD6),
+    cardShadow: Color(0x124C4696),
     textPrimary: Color(0xFF14141B),
     textSecondary: Color(0xFF5A5A6E),
     textTertiary: Color(0xFF8B8B9E),
+    textFaint: Color(0xFFB4B4C4),
     present: Color(0xFF12A05F),
     absent: Color(0xFFC0504E),
-    cancelled: Color(0xFF77778C),
-    // Bronze rather than the previous hot orange-brown. On white a warning
-    // colour has to be dark to stay legible, so the calm comes from dropping
-    // saturation instead of lightening it.
-    warning: Color(0xFF8F6B33),
+    cancelled: Color(0xFF8B8B9E),
+    // Bronze rather than a hot orange. On white a warning colour has to be
+    // dark to stay legible, so the calm comes from dropping saturation
+    // instead of lightening it.
+    warning: Color(0xFFB57516),
   );
 
   @override
@@ -112,14 +187,21 @@ class AppPalette extends ThemeExtension<AppPalette> {
     Color? surface,
     Color? surfaceHigh,
     Color? surfaceHigher,
+    Color? navSurface,
     Color? outline,
     Color? outlineSoft,
+    Color? hairline,
     Color? accent,
     Color? accentSoft,
     Color? cyan,
+    Color? gradientTop,
+    Color? gradientMid,
+    Color? gradientBottom,
+    Color? cardShadow,
     Color? textPrimary,
     Color? textSecondary,
     Color? textTertiary,
+    Color? textFaint,
     Color? present,
     Color? absent,
     Color? cancelled,
@@ -131,14 +213,21 @@ class AppPalette extends ThemeExtension<AppPalette> {
       surface: surface ?? this.surface,
       surfaceHigh: surfaceHigh ?? this.surfaceHigh,
       surfaceHigher: surfaceHigher ?? this.surfaceHigher,
+      navSurface: navSurface ?? this.navSurface,
       outline: outline ?? this.outline,
       outlineSoft: outlineSoft ?? this.outlineSoft,
+      hairline: hairline ?? this.hairline,
       accent: accent ?? this.accent,
       accentSoft: accentSoft ?? this.accentSoft,
       cyan: cyan ?? this.cyan,
+      gradientTop: gradientTop ?? this.gradientTop,
+      gradientMid: gradientMid ?? this.gradientMid,
+      gradientBottom: gradientBottom ?? this.gradientBottom,
+      cardShadow: cardShadow ?? this.cardShadow,
       textPrimary: textPrimary ?? this.textPrimary,
       textSecondary: textSecondary ?? this.textSecondary,
       textTertiary: textTertiary ?? this.textTertiary,
+      textFaint: textFaint ?? this.textFaint,
       present: present ?? this.present,
       absent: absent ?? this.absent,
       cancelled: cancelled ?? this.cancelled,
@@ -157,14 +246,21 @@ class AppPalette extends ThemeExtension<AppPalette> {
       surface: Color.lerp(surface, other.surface, t)!,
       surfaceHigh: Color.lerp(surfaceHigh, other.surfaceHigh, t)!,
       surfaceHigher: Color.lerp(surfaceHigher, other.surfaceHigher, t)!,
+      navSurface: Color.lerp(navSurface, other.navSurface, t)!,
       outline: Color.lerp(outline, other.outline, t)!,
       outlineSoft: Color.lerp(outlineSoft, other.outlineSoft, t)!,
+      hairline: Color.lerp(hairline, other.hairline, t)!,
       accent: Color.lerp(accent, other.accent, t)!,
       accentSoft: Color.lerp(accentSoft, other.accentSoft, t)!,
       cyan: Color.lerp(cyan, other.cyan, t)!,
+      gradientTop: Color.lerp(gradientTop, other.gradientTop, t)!,
+      gradientMid: Color.lerp(gradientMid, other.gradientMid, t)!,
+      gradientBottom: Color.lerp(gradientBottom, other.gradientBottom, t)!,
+      cardShadow: Color.lerp(cardShadow, other.cardShadow, t)!,
       textPrimary: Color.lerp(textPrimary, other.textPrimary, t)!,
       textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
       textTertiary: Color.lerp(textTertiary, other.textTertiary, t)!,
+      textFaint: Color.lerp(textFaint, other.textFaint, t)!,
       present: Color.lerp(present, other.present, t)!,
       absent: Color.lerp(absent, other.absent, t)!,
       cancelled: Color.lerp(cancelled, other.cancelled, t)!,
@@ -205,6 +301,110 @@ class AppColors {
   ];
 
   static const int defaultSubjectColor = 0xFF7C6BFF;
+
+  /// WCAG relative-luminance contrast ratio between two opaque colours.
+  static double contrast(Color a, Color b) {
+    double channel(double c) => c <= 0.03928
+        ? c / 12.92
+        : math.pow((c + 0.055) / 1.055, 2.4).toDouble();
+    double luminance(Color c) =>
+        0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b);
+    final double la = luminance(a);
+    final double lb = luminance(b);
+    return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
+  }
+
+  /// A subject's colour darkened or lightened until it reads as text on the
+  /// current card surface. Subject colours are picked for identity on a tile
+  /// — lime on white is about 1.5:1 — so the hue is kept and only the
+  /// lightness is walked until the contrast clears AA.
+  static Color inkOn(Color base, AppPalette palette) {
+    final HSLColor hsl = HSLColor.fromColor(base);
+    final double direction = palette.isDark ? 1 : -1;
+    // Deep colours on white can need a saturation lift to stay recognisable
+    // once darkened; on black the opposite is never a problem.
+    final double saturation =
+        palette.isDark ? hsl.saturation : math.min(1, hsl.saturation * 1.1);
+
+    HSLColor candidate = hsl.withSaturation(saturation);
+    for (int step = 0; step <= 50; step++) {
+      final double lightness =
+          (hsl.lightness + direction * step * 0.02).clamp(0.0, 1.0);
+      candidate = candidate.withLightness(lightness);
+      if (contrast(candidate.toColor(), palette.surface) >= 4.5) break;
+      if (lightness == 0 || lightness == 1) break;
+    }
+    return candidate.toColor();
+  }
+}
+
+/// The design was drawn on a 320dp phone artboard, so every size in it is a
+/// phone size. A tablet is not a bigger phone held at the same distance — it
+/// is held further away — so the whole scale steps up rather than each widget
+/// guessing.
+///
+/// The ramp is continuous, not a breakpoint: a 7" foldable sits between a
+/// phone and a tablet and should get a proportional amount, not fall off a
+/// cliff at some width. Below [phoneWidth] the design is used exactly as
+/// drawn, because at that size it already is the right size.
+class AppScale {
+  const AppScale._();
+
+  /// At or under this, no scaling — this is what the design was drawn for.
+  static const double phoneWidth = 600;
+
+  /// Where the ramp tops out.
+  static const double largeWidth = 900;
+
+  static const double _maxFactor = 1.3;
+
+  static double of(Size size) {
+    final double width = size.shortestSide;
+    if (width <= phoneWidth) return 1;
+    final double t =
+        ((width - phoneWidth) / (largeWidth - phoneWidth)).clamp(0.0, 1.0);
+    return 1 + (_maxFactor - 1) * t;
+  }
+
+  /// The content column, which grows with the type or the lines get short and
+  /// the page starts to look like a phone screenshot in a frame.
+  static double contentWidth(Size size) => 560 * of(size);
+}
+
+/// Multiplies the viewer's own text scaling rather than replacing it, so a
+/// larger system font still compounds on a tablet.
+@immutable
+class ScaledText extends TextScaler {
+  const ScaledText(this.inner, this.factor);
+
+  final TextScaler inner;
+  final double factor;
+
+  @override
+  double scale(double fontSize) => inner.scale(fontSize * factor);
+
+  @override
+  // ignore: deprecated_member_use
+  double get textScaleFactor => inner.textScaleFactor * factor;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ScaledText && other.inner == inner && other.factor == factor;
+
+  @override
+  int get hashCode => Object.hash(inner, factor);
+}
+
+/// The two bundled families. Referenced by name rather than by a `TextStyle`
+/// constant so a caller can set a size and weight without inheriting one.
+class AppFonts {
+  const AppFonts._();
+
+  static const String sans = 'Plus Jakarta Sans';
+
+  /// Times, dates, room codes and counts. A tabular figure keeps a column of
+  /// start times aligned, which the proportional face does not.
+  static const String mono = 'JetBrains Mono';
 }
 
 /// Shared spacing / radius scale so layouts stay rhythmically consistent.
@@ -220,8 +420,11 @@ class AppSpacing {
 
   static const double radiusSm = 10;
   static const double radiusMd = 16;
-  static const double radiusLg = 22;
+  static const double radiusLg = 20;
   static const double radiusXl = 28;
+
+  /// The radius of the sheet that lifts over a gradient header.
+  static const double radiusSheet = 28;
 }
 
 class AppTheme {
@@ -235,8 +438,20 @@ class AppTheme {
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: icons,
       statusBarBrightness: p.brightness,
-      systemNavigationBarColor: p.canvas,
+      systemNavigationBarColor: p.navSurface,
       systemNavigationBarIconBrightness: icons,
+    );
+  }
+
+  /// The variant used while a gradient header is behind the status bar.
+  static SystemUiOverlayStyle overlayStyleOnGradient(AppPalette p) {
+    return SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+      systemNavigationBarColor: p.navSurface,
+      systemNavigationBarIconBrightness:
+          p.isDark ? Brightness.light : Brightness.dark,
     );
   }
 
@@ -252,7 +467,7 @@ class AppTheme {
     final ColorScheme scheme = ColorScheme(
       brightness: p.brightness,
       primary: p.accent,
-      onPrimary: Colors.white,
+      onPrimary: isDark ? const Color(0xFF1B1040) : Colors.white,
       primaryContainer: p.accentSoft,
       onPrimaryContainer: isDark ? p.textPrimary : p.accent,
       secondary: p.cyan,
@@ -286,6 +501,7 @@ class AppTheme {
       useMaterial3: true,
       brightness: p.brightness,
       colorScheme: scheme,
+      fontFamily: AppFonts.sans,
       scaffoldBackgroundColor: p.canvas,
       canvasColor: p.canvas,
       splashFactory: InkSparkle.splashFactory,
@@ -298,17 +514,19 @@ class AppTheme {
       // Flutter 3.35 normalised component themes: ThemeData now takes the
       // *ThemeData variants of these two.
       appBarTheme: AppBarThemeData(
-        backgroundColor: p.canvas,
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        systemOverlayStyle: overlayStyleFor(p),
-        titleTextStyle: TextStyle(
-          color: p.textPrimary,
-          fontSize: 22,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.4,
+        systemOverlayStyle: overlayStyleOnGradient(p),
+        titleTextStyle: const TextStyle(
+          fontFamily: AppFonts.sans,
+          color: Colors.white,
+          fontSize: 19,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.5,
         ),
       ),
       dividerTheme: DividerThemeData(
@@ -316,45 +534,44 @@ class AppTheme {
         thickness: 1,
         space: 1,
       ),
-      bottomNavigationBarTheme: BottomNavigationBarThemeData(
-        backgroundColor: p.surface,
-        selectedItemColor: p.accent,
-        unselectedItemColor: p.textTertiary,
-        type: BottomNavigationBarType.fixed,
-        elevation: 0,
-      ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: p.surface,
+        backgroundColor: p.navSurface,
         surfaceTintColor: Colors.transparent,
-        indicatorColor: p.accentSoft,
+        indicatorColor: Colors.transparent,
         elevation: 0,
-        height: 68,
+        height: 64,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         iconTheme: WidgetStateProperty.resolveWith<IconThemeData>((states) {
           final bool selected = states.contains(WidgetState.selected);
           return IconThemeData(
-            size: 24,
-            color: selected ? p.accent : p.textTertiary,
+            size: 23,
+            color: selected ? p.accent : p.textFaint,
           );
         }),
         labelTextStyle: WidgetStateProperty.resolveWith<TextStyle>((states) {
           final bool selected = states.contains(WidgetState.selected);
           return TextStyle(
-            fontSize: 11.5,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-            color: selected ? p.accent : p.textTertiary,
+            fontFamily: AppFonts.sans,
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+            color: selected ? p.accent : p.textFaint,
           );
         }),
       ),
       inputDecorationTheme: InputDecorationThemeData(
         filled: true,
-        fillColor: p.surfaceHigh,
+        // Not surfaceHigh: in the light palette that is the same colour as the
+        // canvas a sheet is painted with, so the field would vanish into it.
+        fillColor: p.surfaceHigher,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.lg,
           vertical: AppSpacing.lg,
         ),
         hintStyle: TextStyle(color: p.textTertiary),
         labelStyle: TextStyle(color: p.textSecondary),
+        // A field keeps a hairline even below the sheet edge: an empty one
+        // with neither outline nor contrast reads as a caption, not as
+        // somewhere to type. The focus ring is still the accent.
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           borderSide: BorderSide(color: p.outline),
@@ -379,35 +596,51 @@ class AppTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: p.accent,
-          foregroundColor: Colors.white,
+          foregroundColor: isDark ? const Color(0xFF1B1040) : Colors.white,
           minimumSize: const Size(0, 52),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           ),
           textStyle: const TextStyle(
-            fontSize: 15.5,
-            fontWeight: FontWeight.w600,
+            fontFamily: AppFonts.sans,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: p.accent,
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          textStyle: const TextStyle(
+            fontFamily: AppFonts.sans,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: p.textPrimary,
+          // Same trap as the field fill: surfaceHigh is the sheet's own colour
+          // in light. A secondary button carries a fill *and* a hairline —
+          // without either it reads as a line of text rather than a control.
+          backgroundColor: p.surfaceHigher,
           minimumSize: const Size(0, 52),
           side: BorderSide(color: p.outline),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           ),
+          textStyle: const TextStyle(
+            fontFamily: AppFonts.sans,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: p.accent,
+        // The FAB paints its own gradient, so the theme only has to stop
+        // Material from painting a flat fill and a shadow underneath it.
+        backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
         elevation: 0,
         focusElevation: 0,
@@ -415,14 +648,14 @@ class AppTheme {
         highlightElevation: 0,
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: p.surface,
+        backgroundColor: p.canvas,
         surfaceTintColor: Colors.transparent,
-        modalBackgroundColor: p.surface,
+        modalBackgroundColor: p.canvas,
         showDragHandle: true,
-        dragHandleColor: p.outline,
+        dragHandleColor: p.textFaint,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(
-            top: Radius.circular(AppSpacing.radiusXl),
+            top: Radius.circular(AppSpacing.radiusSheet),
           ),
         ),
       ),
@@ -430,16 +663,21 @@ class AppTheme {
         // Dark keeps a raised surface; light needs a dark chip or the snackbar
         // vanishes into the page.
         backgroundColor: isDark ? p.surfaceHigher : const Color(0xFF23232E),
-        contentTextStyle:
-            TextStyle(color: isDark ? p.textPrimary : Colors.white),
+        contentTextStyle: TextStyle(
+          fontFamily: AppFonts.sans,
+          color: isDark ? p.textPrimary : Colors.white,
+        ),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         ),
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: p.surfaceHigh,
+        backgroundColor: p.surface,
         surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        ),
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith<Color>((states) {
@@ -451,9 +689,7 @@ class AppTheme {
               ? p.accent
               : p.surfaceHigher;
         }),
-        trackOutlineColor: WidgetStateProperty.all<Color>(
-          isDark ? Colors.transparent : p.outline,
-        ),
+        trackOutlineColor: WidgetStateProperty.all<Color>(Colors.transparent),
       ),
       listTileTheme: ListTileThemeData(
         iconColor: p.textSecondary,
@@ -461,15 +697,27 @@ class AppTheme {
       ),
       chipTheme: ChipThemeData(
         backgroundColor: p.surfaceHigh,
-        side: BorderSide(color: p.outline),
+        side: BorderSide.none,
         labelStyle: TextStyle(
+          fontFamily: AppFonts.sans,
           color: p.textSecondary,
           fontSize: 13,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
         ),
+      ),
+      sliderTheme: SliderThemeData(
+        activeTrackColor: p.accent,
+        inactiveTrackColor: p.surfaceHigher,
+        thumbColor: p.accent,
+        overlayColor: p.accent.withValues(alpha: 0.12),
+        trackHeight: 4,
+        // The default 24px overlay indents the track that far from its own
+        // padding, which left every slider sitting right of the cards above
+        // and below it.
+        overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: p.accent,
@@ -483,27 +731,27 @@ class AppTheme {
     return base
         .copyWith(
           displaySmall: base.displaySmall?.copyWith(
-            fontWeight: FontWeight.w700,
-            letterSpacing: -1.2,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -1.6,
           ),
           headlineMedium: base.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.8,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -1,
           ),
           headlineSmall: base.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.6,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.7,
           ),
           titleLarge: base.titleLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.4,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
           ),
           titleMedium: base.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             letterSpacing: -0.2,
           ),
           bodyMedium: base.bodyMedium?.copyWith(height: 1.35),
-          labelLarge: base.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+          labelLarge: base.labelLarge?.copyWith(fontWeight: FontWeight.w700),
         )
         .apply(bodyColor: p.textPrimary, displayColor: p.textPrimary);
   }

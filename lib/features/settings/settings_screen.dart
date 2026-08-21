@@ -15,6 +15,7 @@ import '../../services/backup_service.dart';
 import '../../services/notification_service.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
+import '../../widgets/gradient_header.dart';
 import '../subjects/class_editor_sheets.dart';
 import '../subjects/subjects_screen.dart';
 import 'timetable_layout_section.dart';
@@ -34,507 +35,449 @@ class SettingsScreen extends ConsumerWidget {
     final List<Subject> subjects = timetable?.subjects ?? <Subject>[];
     final int classCount =
         (timetable?.slots.length ?? 0) + (timetable?.extras.length ?? 0);
-    final SettingsController controller =
-        ref.read(settingsProvider.notifier);
+    final SettingsController controller = ref.read(settingsProvider.notifier);
 
-    return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            AppSpacing.lg,
-            AppSpacing.lg,
-            100,
-          ),
-          children: <Widget>[
-            const Text(
-              'Settings',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -1,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-
-            // ------------------------------------------------------ semester
-            const SectionHeader('Semester'),
-            SurfaceCard(
-              padding: EdgeInsets.zero,
-              child: Column(
-                children: <Widget>[
-                  _Row(
-                    icon: Icons.play_circle_outline_rounded,
-                    title: 'Starts',
-                    value: settings.semesterStart == null
-                        ? 'Not set'
-                        : Dates.formatFull(settings.semesterStart!),
-                    onTap: () => _pickSemesterDate(
-                      context,
-                      controller,
-                      settings,
-                      isStart: true,
-                    ),
-                  ),
-                  const Divider(indent: AppSpacing.lg),
-                  _Row(
-                    icon: Icons.stop_circle_outlined,
-                    title: 'Ends',
-                    value: settings.semesterEnd == null
-                        ? 'Not set'
-                        : Dates.formatFull(settings.semesterEnd!),
-                    onTap: () => _pickSemesterDate(
-                      context,
-                      controller,
-                      settings,
-                      isStart: false,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            const _Hint(
-              'Recurring classes only appear between these dates, and the '
-              '"classes left" figures are counted up to the end date.',
-            ),
-            const SizedBox(height: AppSpacing.xl),
-
-            // -------------------------------------------------------- target
-            const SectionHeader('Attendance target'),
-            SurfaceCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      const Expanded(
-                        child: Text(
-                          'Minimum required',
-                          style: TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        '${settings.targetPercent.round()}%',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: context.palette.accent,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Slider(
-                    value: settings.targetPercent.clamp(40, 100),
-                    min: 40,
-                    max: 100,
-                    divisions: 60,
-                    label: '${settings.targetPercent.round()}%',
-                    onChanged: (double value) => controller.setTarget(value),
-                  ),
-                  const _Hint(
-                    'Individual subjects can override this — open Subjects '
-                    'below and edit one.',
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-
-            // ------------------------------------------------------ subjects
-            const SectionHeader('Subjects'),
-            SurfaceCard(
-              padding: EdgeInsets.zero,
-              child: _Row(
-                icon: Icons.menu_book_outlined,
-                title: 'Manage subjects',
-                value: subjects.isEmpty
-                    ? 'None yet — add your first'
-                    : '${subjects.length} '
-                        '${subjects.length == 1 ? 'subject' : 'subjects'} · '
-                        '$classCount ${classCount == 1 ? 'class' : 'classes'}',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (BuildContext context) => const SubjectsScreen(),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            const _Hint(
-              'Add courses, change their colour or attendance target, and '
-              'delete ones you have dropped.',
-            ),
-            const SizedBox(height: AppSpacing.xl),
-
-            // ------------------------------------------- timetable layout
-            const DayGridSection(),
-            const SizedBox(height: AppSpacing.xl),
-            const RoomsSection(),
-            const SizedBox(height: AppSpacing.xl),
-            const TagsSection(),
-            const SizedBox(height: AppSpacing.xl),
-
-            // ------------------------------------------------ class lengths
-            SectionHeader(
-              'Class categories',
-              trailing: TextButton.icon(
-                onPressed: () => showCategoryEditor(context, ref),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Add'),
-              ),
-            ),
-            if (categories.isEmpty)
-              const SurfaceCard(
-                child: _Hint(
-                  'No categories yet. Create one — Lab, Theory, Tutorial — and '
-                  'give it a default length, then put your subjects in it.',
-                ),
-              )
-            else
-              SurfaceCard(
-                padding: EdgeInsets.zero,
-                child: Column(
-                  children: <Widget>[
-                    for (int i = 0; i < categories.length; i++) ...<Widget>[
-                      if (i > 0) const Divider(indent: AppSpacing.lg),
-                      _Row(
-                        icon: Icons.category_outlined,
-                        title: categories[i].name,
-                        value: 'Classes default to '
-                            '${categories[i].durationLabel}',
-                        onTap: () => showCategoryEditor(
-                          context,
-                          ref,
-                          category: categories[i],
-                        ),
-                        trailing: IconButton(
-                          onPressed: () =>
-                              _deleteCategory(context, ref, categories[i]),
-                          icon: const Icon(Icons.close_rounded, size: 18),
-                          color: context.palette.textTertiary,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            const SizedBox(height: AppSpacing.md),
-            SurfaceCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      const Expanded(
-                        child: Text(
-                          'Default class length',
-                          style: TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        Clock.formatDuration(
-                          settings.defaultClassDurationMinutes,
-                        ),
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: context.palette.accent,
-                          letterSpacing: -0.4,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Slider(
-                    value: settings.defaultClassDurationMinutes
-                        .toDouble()
-                        .clamp(15, 300),
-                    min: 15,
-                    max: 300,
-                    divisions: 57,
-                    label: Clock.formatDuration(
-                      settings.defaultClassDurationMinutes,
-                    ),
-                    onChanged: (double value) => controller.save(
-                      settings.copyWith(
-                        defaultClassDurationMinutes: (value / 5).round() * 5,
-                      ),
-                    ),
-                  ),
-                  const _Hint(
-                    'Used for subjects that are not in a category. Setting a '
-                    'class start time fills the end time in from this.',
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-
-            // ------------------------------------------------- notifications
-            // --------------------------------------------------- appearance
-            const SectionHeader('Appearance'),
-            SurfaceCard(
-              child: Row(
-                children: <Widget>[
-                  for (final AppThemeMode mode in AppThemeMode.values)
-                    Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          right: mode == AppThemeMode.dark ? 0 : AppSpacing.sm,
-                        ),
-                        child: _ThemeOption(
-                          mode: mode,
-                          selected: settings.themeMode == mode,
-                          onTap: () => controller
-                              .save(settings.copyWith(themeMode: mode)),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            _Hint(
-              settings.themeMode == AppThemeMode.system
-                  ? 'Follows your device setting, switching automatically when '
-                      'it does.'
-                  : 'Always ${settings.themeMode.label.toLowerCase()}, whatever '
-                      'your device is set to.',
-            ),
-            const SizedBox(height: AppSpacing.xl),
-
-            const SectionHeader('Notifications'),
-            SurfaceCard(
-              padding: EdgeInsets.zero,
-              child: Column(
-                children: <Widget>[
-                  _SwitchRow(
-                    icon: settings.notificationsEnabled
-                        ? Icons.notifications_outlined
-                        : Icons.notifications_off_outlined,
-                    title: 'All notifications',
-                    subtitle: settings.notificationsEnabled
-                        ? 'Individual types can be turned off below'
-                        : 'Nothing is sent to your notification tray',
-                    value: settings.notificationsEnabled,
-                    onChanged: (bool v) async {
-                      if (v) await NotificationService.instance.requestPermissions();
-                      await controller
-                          .save(settings.copyWith(notificationsEnabled: v));
-                      await ref.read(actionsProvider).reloadAfterImport();
-                    },
-                  ),
-                  const Divider(indent: AppSpacing.lg),
-                  _SwitchRow(
-                    icon: Icons.chat_bubble_outline,
-                    title: 'Show alerts in the app',
-                    subtitle: settings.showDangerInApp
-                        ? 'Attendance warnings appear here instead'
-                        : 'Used when attendance alerts are switched off',
-                    value: settings.inAppAlerts,
-                    onChanged: (bool v) async {
-                      await controller.save(settings.copyWith(inAppAlerts: v));
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Opacity(
-              // The per-type rows stay readable but inert while the master
-              // switch is off, so it is obvious why they do nothing.
-              opacity: settings.notificationsEnabled ? 1 : 0.4,
-              child: IgnorePointer(
-                ignoring: !settings.notificationsEnabled,
-                child: SurfaceCard(
-              padding: EdgeInsets.zero,
-              child: Column(
-                children: <Widget>[
-                  _SwitchRow(
-                    icon: Icons.notifications_active_outlined,
-                    title: 'Before each class',
-                    subtitle:
-                        '${settings.notifyLeadMinutes} minutes before it starts',
-                    value: settings.notifyBeforeClass,
-                    onChanged: (bool v) async {
-                      if (v) await NotificationService.instance.requestPermissions();
-                      await controller
-                          .save(settings.copyWith(notifyBeforeClass: v));
-                      await ref.read(actionsProvider).reloadAfterImport();
-                    },
-                    onTapSubtitle: settings.notifyBeforeClass
-                        ? () => _pickLeadTime(context, controller, settings, ref)
-                        : null,
-                  ),
-                  const Divider(indent: AppSpacing.lg),
-                  _SwitchRow(
-                    icon: Icons.edit_calendar_outlined,
-                    title: 'Evening reminder',
-                    subtitle:
-                        'Mark unmarked classes at ${Clock.format(settings.eveningReminderMinutes, use24Hour: settings.use24HourTime)}',
-                    value: settings.notifyEveningReminder,
-                    onChanged: (bool v) async {
-                      if (v) await NotificationService.instance.requestPermissions();
-                      await controller
-                          .save(settings.copyWith(notifyEveningReminder: v));
-                      await ref.read(actionsProvider).reloadAfterImport();
-                    },
-                    onTapSubtitle: settings.notifyEveningReminder
-                        ? () =>
-                            _pickEveningTime(context, controller, settings, ref)
-                        : null,
-                  ),
-                  const Divider(indent: AppSpacing.lg),
-                  _SwitchRow(
-                    icon: Icons.warning_amber_rounded,
-                    title: 'Attendance alerts',
-                    subtitle: settings.showDangerInApp
-                        ? 'Off — shown in the app instead'
-                        : 'Warn me when a subject nears the limit',
-                    value: settings.notifyAttendanceDanger,
-                    onChanged: (bool v) async {
-                      if (v) await NotificationService.instance.requestPermissions();
-                      await controller
-                          .save(settings.copyWith(notifyAttendanceDanger: v));
-                      await ref.read(actionsProvider).reloadAfterImport();
-                    },
-                  ),
-                ],
-              ),
-                ),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-
-            // ------------------------------------------------------ holidays
-            SectionHeader(
-              'Holidays',
-              trailing: TextButton.icon(
-                onPressed: () => _addHoliday(context, ref),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Add'),
-              ),
-            ),
-            if (holidays.isEmpty)
-              const SurfaceCard(
-                child: _Hint(
-                  'No holidays yet. Add days when classes do not run — they '
-                  'are skipped everywhere and never count against you.',
-                ),
-              )
-            else
-              SurfaceCard(
-                padding: EdgeInsets.zero,
-                child: Column(
-                  children: <Widget>[
-                    for (int i = 0; i < holidays.length; i++) ...<Widget>[
-                      if (i > 0) const Divider(indent: AppSpacing.lg),
-                      _Row(
-                        icon: Icons.celebration_outlined,
-                        title: holidays[i].name,
-                        value: Dates.formatFull(holidays[i].date),
-                        trailing: IconButton(
-                          onPressed: () async {
-                            final int? id = holidays[i].id;
-                            if (id != null) {
-                              await ref.read(actionsProvider).deleteHoliday(id);
-                            }
-                          },
-                          icon: const Icon(Icons.close_rounded, size: 18),
-                          color: context.palette.textTertiary,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            const SizedBox(height: AppSpacing.xl),
-
-            // ---------------------------------------------------- appearance
-            const SectionHeader('Display'),
-            SurfaceCard(
-              padding: EdgeInsets.zero,
-              child: _SwitchRow(
-                icon: Icons.schedule_rounded,
-                title: '24-hour time',
-                subtitle: settings.use24HourTime ? '14:30' : '2:30 pm',
-                value: settings.use24HourTime,
-                onChanged: (bool v) =>
-                    controller.save(settings.copyWith(use24HourTime: v)),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-
-            // ---------------------------------------------------------- data
-            const SectionHeader('Your data'),
-            SurfaceCard(
-              padding: EdgeInsets.zero,
-              child: Column(
-                children: <Widget>[
-                  _Row(
-                    icon: Icons.ios_share_rounded,
-                    title: 'Export backup',
-                    value: 'Save a JSON file',
-                    onTap: () => _export(context, ref),
-                  ),
-                  const Divider(indent: AppSpacing.lg),
-                  _Row(
-                    icon: Icons.download_rounded,
-                    title: 'Import backup',
-                    value: 'Restore from a file',
-                    onTap: () => _import(context, ref),
-                  ),
-                  const Divider(indent: AppSpacing.lg),
-                  _SwitchRow(
-                    icon: Icons.backup_outlined,
-                    title: 'Automatic backup',
-                    subtitle: settings.autoBackupEnabled
-                        ? 'Once a day, keeping the last '
-                            '${BackupService.keepAutoBackups}'
-                        : 'Off',
-                    value: settings.autoBackupEnabled,
-                    onChanged: (bool v) => controller
-                        .save(settings.copyWith(autoBackupEnabled: v)),
-                  ),
-                  const Divider(indent: AppSpacing.lg),
-                  _Row(
-                    icon: Icons.delete_forever_outlined,
-                    title: 'Reset everything',
-                    value: 'Delete all subjects and history',
-                    danger: true,
-                    onTap: () => _reset(context, ref),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-
-            Center(
-              child: Text(
-                'Zeolite · 1.0.0\nAll your data stays on this device.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  height: 1.5,
-                  color: context.palette.textTertiary,
-                ),
-              ),
-            ),
-          ],
-        ),
+    return GradientScaffold(
+      headerGap: 22,
+      header: _TargetHeader(
+        target: settings.targetPercent,
+        onChanged: controller.setTarget,
       ),
+      slivers: <Widget>[
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 96),
+          sliver: SliverList.list(
+            children: <Widget>[
+              const SectionHeader('Semester'),
+              SurfaceCard(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: <Widget>[
+                    _Row(
+                      icon: Icons.play_circle_outline_rounded,
+                      title: 'Starts',
+                      value: settings.semesterStart == null
+                          ? 'Not set'
+                          : Dates.formatFull(settings.semesterStart!),
+                      onTap: () => _pickSemesterDate(
+                        context,
+                        controller,
+                        settings,
+                        isStart: true,
+                      ),
+                    ),
+                    const Divider(indent: 58),
+                    _Row(
+                      icon: Icons.stop_circle_outlined,
+                      title: 'Ends',
+                      value: settings.semesterEnd == null
+                          ? 'Not set'
+                          : Dates.formatFull(settings.semesterEnd!),
+                      onTap: () => _pickSemesterDate(
+                        context,
+                        controller,
+                        settings,
+                        isStart: false,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              const _Hint(
+                'Recurring classes only appear between these dates, and the '
+                '"classes left" figures are counted up to the end date.',
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              const SectionHeader('Subjects'),
+              SurfaceCard(
+                padding: EdgeInsets.zero,
+                child: _Row(
+                  icon: Icons.menu_book_outlined,
+                  title: 'Manage subjects',
+                  value: subjects.isEmpty
+                      ? 'None yet — add your first'
+                      : '${subjects.length} '
+                          '${subjects.length == 1 ? 'subject' : 'subjects'} · '
+                          '$classCount ${classCount == 1 ? 'class' : 'classes'}',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (BuildContext context) => const SubjectsScreen(),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              const _Hint(
+                'Add courses, change their colour or attendance target, and '
+                'delete ones you have dropped.',
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              const DayGridSection(),
+              const SizedBox(height: AppSpacing.xl),
+              const RoomsSection(),
+              const SizedBox(height: AppSpacing.xl),
+              const TagsSection(),
+              const SizedBox(height: AppSpacing.xl),
+              SectionHeader(
+                'Class categories',
+                trailing: TextButton.icon(
+                  onPressed: () => showCategoryEditor(context, ref),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Add'),
+                ),
+              ),
+              if (categories.isEmpty)
+                const SurfaceCard(
+                  child: _Hint(
+                    'No categories yet. Create one — Lab, Theory, Tutorial — and '
+                    'give it a default length, then put your subjects in it.',
+                  ),
+                )
+              else
+                SurfaceCard(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: <Widget>[
+                      for (int i = 0; i < categories.length; i++) ...<Widget>[
+                        if (i > 0) const Divider(indent: 58),
+                        _Row(
+                          icon: Icons.category_outlined,
+                          title: categories[i].name,
+                          value: 'Classes default to '
+                              '${categories[i].durationLabel}',
+                          onTap: () => showCategoryEditor(
+                            context,
+                            ref,
+                            category: categories[i],
+                          ),
+                          trailing: IconButton(
+                            onPressed: () =>
+                                _deleteCategory(context, ref, categories[i]),
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            color: context.palette.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              const SizedBox(height: AppSpacing.md),
+              SurfaceCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        const Expanded(
+                          child: Text(
+                            'Default class length',
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          Clock.formatDuration(
+                            settings.defaultClassDurationMinutes,
+                          ),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: context.palette.accent,
+                            letterSpacing: -0.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Slider(
+                      value: settings.defaultClassDurationMinutes
+                          .toDouble()
+                          .clamp(15, 300),
+                      min: 15,
+                      max: 300,
+                      divisions: 57,
+                      label: Clock.formatDuration(
+                        settings.defaultClassDurationMinutes,
+                      ),
+                      onChanged: (double value) => controller.save(
+                        settings.copyWith(
+                          defaultClassDurationMinutes: (value / 5).round() * 5,
+                        ),
+                      ),
+                    ),
+                    const _Hint(
+                      'Used for subjects that are not in a category. Setting a '
+                      'class start time fills the end time in from this.',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              const SectionHeader('Appearance'),
+              SurfaceCard(
+                child: Row(
+                  children: <Widget>[
+                    for (final AppThemeMode mode in AppThemeMode.values)
+                      Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            right:
+                                mode == AppThemeMode.dark ? 0 : AppSpacing.sm,
+                          ),
+                          child: _ThemeOption(
+                            mode: mode,
+                            selected: settings.themeMode == mode,
+                            onTap: () => controller
+                                .save(settings.copyWith(themeMode: mode)),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              _Hint(
+                settings.themeMode == AppThemeMode.system
+                    ? 'Follows your device setting, switching automatically when '
+                        'it does.'
+                    : 'Always ${settings.themeMode.label.toLowerCase()}, whatever '
+                        'your device is set to.',
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              const SectionHeader('Notifications'),
+              SurfaceCard(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: <Widget>[
+                    _SwitchRow(
+                      icon: settings.notificationsEnabled
+                          ? Icons.notifications_outlined
+                          : Icons.notifications_off_outlined,
+                      title: 'All notifications',
+                      subtitle: settings.notificationsEnabled
+                          ? 'Individual types can be turned off below'
+                          : 'Nothing is sent to your notification tray',
+                      value: settings.notificationsEnabled,
+                      onChanged: (bool v) async {
+                        if (v) {
+                          await NotificationService.instance
+                              .requestPermissions();
+                        }
+                        await controller
+                            .save(settings.copyWith(notificationsEnabled: v));
+                        await ref.read(actionsProvider).reloadAfterImport();
+                      },
+                    ),
+                    const Divider(indent: 58),
+                    _SwitchRow(
+                      icon: Icons.chat_bubble_outline,
+                      title: 'Show alerts in the app',
+                      subtitle: settings.showDangerInApp
+                          ? 'Attendance warnings appear here instead'
+                          : 'Used when attendance alerts are switched off',
+                      value: settings.inAppAlerts,
+                      onChanged: (bool v) async {
+                        await controller
+                            .save(settings.copyWith(inAppAlerts: v));
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Opacity(
+                // The per-type rows stay readable but inert while the master
+                // switch is off, so it is obvious why they do nothing.
+                opacity: settings.notificationsEnabled ? 1 : 0.4,
+                child: IgnorePointer(
+                  ignoring: !settings.notificationsEnabled,
+                  child: SurfaceCard(
+                    padding: EdgeInsets.zero,
+                    child: Column(
+                      children: <Widget>[
+                        _SwitchRow(
+                          icon: Icons.notifications_active_outlined,
+                          title: 'Before each class',
+                          subtitle:
+                              '${settings.notifyLeadMinutes} minutes before it starts',
+                          value: settings.notifyBeforeClass,
+                          onChanged: (bool v) async {
+                            if (v) {
+                              await NotificationService.instance
+                                  .requestPermissions();
+                            }
+                            await controller
+                                .save(settings.copyWith(notifyBeforeClass: v));
+                            await ref.read(actionsProvider).reloadAfterImport();
+                          },
+                          onTapSubtitle: settings.notifyBeforeClass
+                              ? () => _pickLeadTime(
+                                  context, controller, settings, ref)
+                              : null,
+                        ),
+                        const Divider(indent: 58),
+                        _SwitchRow(
+                          icon: Icons.edit_calendar_outlined,
+                          title: 'Evening reminder',
+                          subtitle:
+                              'Mark unmarked classes at ${Clock.format(settings.eveningReminderMinutes, use24Hour: settings.use24HourTime)}',
+                          value: settings.notifyEveningReminder,
+                          onChanged: (bool v) async {
+                            if (v) {
+                              await NotificationService.instance
+                                  .requestPermissions();
+                            }
+                            await controller.save(
+                                settings.copyWith(notifyEveningReminder: v));
+                            await ref.read(actionsProvider).reloadAfterImport();
+                          },
+                          onTapSubtitle: settings.notifyEveningReminder
+                              ? () => _pickEveningTime(
+                                  context, controller, settings, ref)
+                              : null,
+                        ),
+                        const Divider(indent: 58),
+                        _SwitchRow(
+                          icon: Icons.warning_amber_rounded,
+                          title: 'Attendance alerts',
+                          subtitle: settings.showDangerInApp
+                              ? 'Off — shown in the app instead'
+                              : 'Warn me when a subject nears the limit',
+                          value: settings.notifyAttendanceDanger,
+                          onChanged: (bool v) async {
+                            if (v) {
+                              await NotificationService.instance
+                                  .requestPermissions();
+                            }
+                            await controller.save(
+                                settings.copyWith(notifyAttendanceDanger: v));
+                            await ref.read(actionsProvider).reloadAfterImport();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              SectionHeader(
+                'Holidays',
+                trailing: TextButton.icon(
+                  onPressed: () => _addHoliday(context, ref),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Add'),
+                ),
+              ),
+              if (holidays.isEmpty)
+                const SurfaceCard(
+                  child: _Hint(
+                    'No holidays yet. Add days when classes do not run — they '
+                    'are skipped everywhere and never count against you.',
+                  ),
+                )
+              else
+                SurfaceCard(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: <Widget>[
+                      for (int i = 0; i < holidays.length; i++) ...<Widget>[
+                        if (i > 0) const Divider(indent: 58),
+                        _Row(
+                          icon: Icons.celebration_outlined,
+                          title: holidays[i].name,
+                          value: Dates.formatFull(holidays[i].date),
+                          trailing: IconButton(
+                            onPressed: () async {
+                              final int? id = holidays[i].id;
+                              if (id != null) {
+                                await ref
+                                    .read(actionsProvider)
+                                    .deleteHoliday(id);
+                              }
+                            },
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            color: context.palette.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              const SizedBox(height: AppSpacing.xl),
+              const SectionHeader('Display'),
+              SurfaceCard(
+                padding: EdgeInsets.zero,
+                child: _SwitchRow(
+                  icon: Icons.schedule_rounded,
+                  title: '24-hour time',
+                  subtitle: settings.use24HourTime ? '14:30' : '2:30 pm',
+                  value: settings.use24HourTime,
+                  onChanged: (bool v) =>
+                      controller.save(settings.copyWith(use24HourTime: v)),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              const SectionHeader('Your data'),
+              SurfaceCard(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: <Widget>[
+                    _Row(
+                      icon: Icons.ios_share_rounded,
+                      title: 'Export backup',
+                      value: 'Save a JSON file',
+                      onTap: () => _export(context, ref),
+                    ),
+                    const Divider(indent: 58),
+                    _Row(
+                      icon: Icons.download_rounded,
+                      title: 'Import backup',
+                      value: 'Restore from a file',
+                      onTap: () => _import(context, ref),
+                    ),
+                    const Divider(indent: 58),
+                    _SwitchRow(
+                      icon: Icons.backup_outlined,
+                      title: 'Automatic backup',
+                      subtitle: settings.autoBackupEnabled
+                          ? 'Once a day, keeping the last '
+                              '${BackupService.keepAutoBackups}'
+                          : 'Off',
+                      value: settings.autoBackupEnabled,
+                      onChanged: (bool v) => controller
+                          .save(settings.copyWith(autoBackupEnabled: v)),
+                    ),
+                    const Divider(indent: 58),
+                    _Row(
+                      icon: Icons.delete_forever_outlined,
+                      title: 'Reset everything',
+                      value: 'Delete all subjects and history',
+                      danger: true,
+                      onTap: () => _reset(context, ref),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              Center(
+                child: Text(
+                  'Zeolite · 1.0.0\nAll your data stays on this device.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.5,
+                    color: context.palette.textTertiary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
-
-  // ------------------------------------------------------------- semester
 
   Future<void> _pickSemesterDate(
     BuildContext context,
@@ -563,13 +506,13 @@ class SettingsScreen extends ConsumerWidget {
     } else {
       final DateTime start = settings.semesterStart ?? Dates.today();
       await controller.setSemester(
-        Dates.keyOf(start) > Dates.keyOf(day) ? Dates.addDays(day, -120) : start,
+        Dates.keyOf(start) > Dates.keyOf(day)
+            ? Dates.addDays(day, -120)
+            : start,
         day,
       );
     }
   }
-
-  // -------------------------------------------------------- notifications
 
   Future<void> _pickLeadTime(
     BuildContext context,
@@ -622,8 +565,6 @@ class SettingsScreen extends ConsumerWidget {
     await ref.read(actionsProvider).reloadAfterImport();
   }
 
-  // ----------------------------------------------------------- categories
-
   Future<void> _deleteCategory(
     BuildContext context,
     WidgetRef ref,
@@ -656,7 +597,8 @@ class SettingsScreen extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: context.palette.absent),
+            style:
+                TextButton.styleFrom(foregroundColor: context.palette.absent),
             child: const Text('Delete'),
           ),
         ],
@@ -666,8 +608,6 @@ class SettingsScreen extends ConsumerWidget {
     if (confirmed != true) return;
     await ref.read(actionsProvider).deleteCategory(id);
   }
-
-  // ------------------------------------------------------------- holidays
 
   Future<void> _addHoliday(BuildContext context, WidgetRef ref) async {
     final DateTime? date = await showDatePicker(
@@ -702,8 +642,6 @@ class SettingsScreen extends ConsumerWidget {
         .read(actionsProvider)
         .addHoliday(Holiday(date: date, name: label));
   }
-
-  // ----------------------------------------------------------------- data
 
   /// Saves through the system dialog so the file lands outside the app's own
   /// folder, which is deleted with the app. Falls back to the clipboard if the
@@ -815,7 +753,8 @@ class SettingsScreen extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: context.palette.absent),
+            style:
+                TextButton.styleFrom(foregroundColor: context.palette.absent),
             child: const Text('Delete all'),
           ),
         ],
@@ -829,7 +768,75 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
-// ------------------------------------------------------------ small pieces
+/// The target lives in the header because everything below is computed
+/// against it.
+class _TargetHeader extends StatelessWidget {
+  const _TargetHeader({required this.target, required this.onChanged});
+
+  final double target;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 16, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              HeaderEyebrow('Settings'),
+              SizedBox(height: 7),
+              HeaderTitle('Minimum required'),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: <Widget>[
+              HeaderNumber('${target.round()}', size: 46),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: 6),
+                  child: HeaderCaption(
+                    'Any subject can override this from its own page.',
+                    emphasis: 0.78,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
+          child: SliderTheme(
+            data: SliderThemeData(
+              activeTrackColor: Colors.white,
+              inactiveTrackColor: Colors.white.withValues(alpha: 0.24),
+              thumbColor: Colors.white,
+              overlayColor: Colors.white.withValues(alpha: 0.16),
+              trackHeight: 4,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+            ),
+            child: Slider(
+              value: target.clamp(40, 100),
+              min: 40,
+              max: 100,
+              divisions: 60,
+              label: '${target.round()}%',
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class _Row extends StatelessWidget {
   const _Row({
@@ -850,52 +857,14 @@ class _Row extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color color = danger ? context.palette.absent : context.palette.textPrimary;
-    return InkWell(
+    final AppPalette p = context.palette;
+    return AppRow(
+      icon: icon,
+      title: title,
+      value: value,
+      tint: danger ? p.absent : p.accent,
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.lg,
-          vertical: AppSpacing.md,
-        ),
-        child: Row(
-          children: <Widget>[
-            Icon(icon, size: 20, color: danger ? color : context.palette.textSecondary),
-            const SizedBox(width: AppSpacing.lg),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w600,
-                      color: color,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: context.palette.textTertiary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (trailing != null)
-              trailing!
-            else if (onTap != null)
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 20,
-                color: context.palette.textTertiary,
-              ),
-          ],
-        ),
-      ),
+      trailing: trailing,
     );
   }
 }
@@ -927,15 +896,8 @@ class _ThemeOption extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: Container(
+        child: Padding(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-            border: Border.all(
-              color: selected ? p.accent : p.outline,
-              width: selected ? 1.6 : 1,
-            ),
-          ),
           child: Column(
             children: <Widget>[
               Icon(
@@ -948,9 +910,9 @@ class _ThemeOption extends StatelessWidget {
                 // "Match system" is too wide for a third of the row.
                 mode == AppThemeMode.system ? 'System' : mode.label,
                 style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected ? p.accent : p.textSecondary,
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                  color: selected ? p.accent : p.textTertiary,
                 ),
               ),
             ],
@@ -981,14 +943,25 @@ class _SwitchRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
-        vertical: AppSpacing.sm,
-      ),
+      padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
       child: Row(
         children: <Widget>[
-          Icon(icon, size: 20, color: context.palette.textSecondary),
-          const SizedBox(width: AppSpacing.lg),
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: context.palette.accent.withValues(
+                alpha: context.palette.isDark ? 0.18 : 0.12,
+              ),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              icon,
+              size: 16,
+              color: AppColors.inkOn(context.palette.accent, context.palette),
+            ),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: InkWell(
               onTap: onTapSubtitle,
@@ -1000,11 +973,12 @@ class _SwitchRow extends StatelessWidget {
                     Text(
                       title,
                       style: const TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 12.5,
+                        height: 1.15,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     Row(
                       children: <Widget>[
                         Flexible(
@@ -1012,7 +986,7 @@ class _SwitchRow extends StatelessWidget {
                             subtitle,
                             maxLines: 2,
                             style: TextStyle(
-                              fontSize: 12.5,
+                              fontSize: 10.5,
                               color: onTapSubtitle != null
                                   ? context.palette.accent
                                   : context.palette.textTertiary,
@@ -1049,8 +1023,8 @@ class _Hint extends StatelessWidget {
     return Text(
       text,
       style: TextStyle(
-        fontSize: 12.5,
-        height: 1.45,
+        fontSize: 10.5,
+        height: 1.4,
         color: context.palette.textTertiary,
       ),
     );

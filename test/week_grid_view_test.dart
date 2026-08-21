@@ -75,12 +75,14 @@ void main() {
     await tester.pumpWidget(_app(_fixture()));
     await tester.pumpAndSettle();
 
-    expect(find.text('1'), findsOneWidget);
-    expect(find.text('9'), findsOneWidget);
-    // Nine blocks and no tenth.
-    expect(find.text('10'), findsNothing);
-    expect(find.text('9:00 am'), findsOneWidget);
-    expect(find.text('3:40 pm'), findsOneWidget);
+    // Nine blocks across seven days, all of them free.
+    expect(find.byIcon(Icons.add_rounded), findsNWidgets(9 * 7));
+    // The gutter keeps the minutes — without them a sub-hourly block length
+    // prints the same label twice in a row.
+    expect(find.text('9:00'), findsOneWidget);
+    expect(find.text('9:50'), findsOneWidget);
+    expect(find.text('3:40'), findsOneWidget);
+    expect(find.text('4:30'), findsNothing);
   });
 
   testWidgets('each empty cell opens its own block, not the last one',
@@ -118,17 +120,32 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Physics'), findsOneWidget);
+    // Seven columns have to fit the screen, so a tile carries the subject's
+    // code rather than its name.
+    expect(find.text('PH'), findsOneWidget);
     expect(find.text('PHY-LAB'), findsOneWidget);
 
-    final double tall = tester.getSize(find.text('Physics').first).height;
-    expect(tall, greaterThan(0));
-    // Two blocks plus the gap between them.
+    // Two blocks plus the gap between them, measured against a free block
+    // rather than a fixed number so a change of block height cannot silently
+    // break the ratio this test exists to guard.
+    final double blockHeight = tester
+        .getSize(
+          find
+              .ancestor(
+                of: find.byIcon(Icons.add_rounded),
+                matching: find.byType(Material),
+              )
+              .first,
+        )
+        .height;
     final Finder tile = find.ancestor(
-      of: find.text('Physics'),
+      of: find.text('PH'),
       matching: find.byType(Material),
     );
-    expect(tester.getSize(tile.first).height, greaterThan(100));
+    expect(
+      tester.getSize(tile.first).height,
+      closeTo(blockHeight * 2 + 4, 0.5),
+    );
   });
 
   testWidgets('a class off the block boundary shows its real time',

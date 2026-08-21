@@ -7,6 +7,7 @@ import '../../data/settings/app_settings.dart';
 import '../../services/notification_service.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
+import '../../widgets/gradient_header.dart';
 
 /// First-run setup: semester dates and the attendance requirement.
 ///
@@ -82,228 +83,164 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Widget build(BuildContext context) {
     final int weeks = (Dates.daysBetween(_start, _end) / 7).round();
 
-    return Scaffold(
-      body: SafeArea(
+    return GradientScaffold(
+      headerGap: 22,
+      header: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(AppSpacing.xl),
-                children: <Widget>[
-                  const SizedBox(height: AppSpacing.xl),
-                  Container(
-                    width: 64,
-                    height: 64,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: context.palette.accent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-                      border: Border.all(
-                        color: context.palette.accent.withValues(alpha: 0.4),
-                      ),
-                    ),
-                    child: Icon(
-                      Icons.school_rounded,
-                      color: context.palette.accent,
-                      size: 30,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                  const Text(
-                    'Zeolite',
-                    style: TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -1.4,
-                      height: 1.1,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    'Your timetable and attendance, in one place. '
-                    'Two quick answers and you are set up.',
-                    style: TextStyle(
-                      fontSize: 15,
-                      height: 1.45,
-                      color: context.palette.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.xxl),
-
-                  const SectionHeader('When is your semester?'),
-                  SurfaceCard(
-                    child: Column(
-                      children: <Widget>[
-                        _DateRow(
-                          label: 'Starts',
-                          value: Dates.formatFull(_start),
-                          onTap: () => _pick(isStart: true),
-                        ),
-                        const SizedBox(height: AppSpacing.md),
-                        const Divider(),
-                        const SizedBox(height: AppSpacing.md),
-                        _DateRow(
-                          label: 'Ends',
-                          value: Dates.formatFull(_end),
-                          onTap: () => _pick(isStart: false),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    'About $weeks weeks. You can change this any time.',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: context.palette.textTertiary,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.xxl),
-
-                  const SectionHeader('Attendance you need'),
-                  SurfaceCard(
-                    child: Column(
-                      children: <Widget>[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: <Widget>[
-                            Text(
-                              '${_target.round()}',
-                              style: TextStyle(
-                                fontSize: 46,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -2,
-                                color: context.palette.accent,
-                              ),
-                            ),
-                            Text(
-                              '%',
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w700,
-                                color: context.palette.accent,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Slider(
-                          value: _target,
-                          min: 40,
-                          max: 100,
-                          divisions: 60,
-                          label: '${_target.round()}%',
-                          onChanged: (double v) => setState(() => _target = v),
-                        ),
-                        Text(
-                          'Most universities require 75%.',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: context.palette.textTertiary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-
-                  SurfaceCard(
-                    child: Row(
-                      children: <Widget>[
-                        Icon(
-                          Icons.notifications_active_outlined,
-                          size: 20,
-                          color: context.palette.textSecondary,
-                        ),
-                        const SizedBox(width: AppSpacing.md),
-                        const Expanded(
-                          child: Text(
-                            'Remind me about classes and unmarked attendance',
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              height: 1.35,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        Switch.adaptive(
-                          value: _notifications,
-                          onChanged: (bool v) =>
-                              setState(() => _notifications = v),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+            Container(
+              width: 52,
+              height: 52,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(17),
+              ),
+              child: const Icon(
+                Icons.school_rounded,
+                color: Colors.white,
+                size: 26,
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xl,
-                AppSpacing.sm,
-                AppSpacing.xl,
-                AppSpacing.xl,
-              ),
-              child: FilledButton(
-                onPressed: _saving ? null : _finish,
-                child: _saving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('Start tracking'),
-              ),
+            const SizedBox(height: 18),
+            const HeaderTitle('Zeolite', size: 30),
+            const SizedBox(height: 8),
+            const HeaderCaption(
+              'Your timetable and attendance, in one place. '
+              'Two quick answers and you are set up.',
+              emphasis: 0.8,
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _DateRow extends StatelessWidget {
-  const _DateRow({
-    required this.label,
-    required this.value,
-    required this.onTap,
-  });
-
-  final String label;
-  final String value;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Row(
-        children: <Widget>[
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: context.palette.textSecondary,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Icon(
-            Icons.edit_calendar_outlined,
-            size: 16,
-            color: context.palette.accent,
-          ),
-        ],
+      bottom: FilledButton(
+        onPressed: _saving ? null : _finish,
+        child: _saving
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Text('Start tracking'),
       ),
+      slivers: <Widget>[
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+          sliver: SliverList.list(
+            children: <Widget>[
+              const SectionHeader('When is your semester?'),
+              GroupedRows(
+                children: <Widget>[
+                  AppRow(
+                    icon: Icons.play_circle_outline_rounded,
+                    title: 'Starts',
+                    value: Dates.formatFull(_start),
+                    onTap: () => _pick(isStart: true),
+                  ),
+                  AppRow(
+                    icon: Icons.stop_circle_outlined,
+                    title: 'Ends',
+                    value: Dates.formatFull(_end),
+                    onTap: () => _pick(isStart: false),
+                  ),
+                ],
+              ),
+              GroupNote('About $weeks weeks. You can change this any time.'),
+              const SizedBox(height: 24),
+              const SectionHeader('Attendance you need'),
+              SurfaceCard(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: <Widget>[
+                        Text(
+                          '${_target.round()}%',
+                          style: TextStyle(
+                            fontSize: 40,
+                            height: 1,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -2,
+                            color: context.palette.accent,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 5),
+                            child: Text(
+                              'Most universities require 75%.',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                height: 1.35,
+                                fontWeight: FontWeight.w500,
+                                color: context.palette.textTertiary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Slider(
+                      value: _target,
+                      min: 40,
+                      max: 100,
+                      divisions: 60,
+                      label: '${_target.round()}%',
+                      onChanged: (double v) => setState(() => _target = v),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              SurfaceCard(
+                padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+                child: Row(
+                  children: <Widget>[
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: context.palette.accent.withValues(
+                          alpha: context.palette.isDark ? 0.18 : 0.12,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.notifications_active_outlined,
+                        size: 16,
+                        color: AppColors.inkOn(
+                          context.palette.accent,
+                          context.palette,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Remind me about classes and unmarked attendance',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          height: 1.35,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Switch.adaptive(
+                      value: _notifications,
+                      onChanged: (bool v) => setState(() => _notifications = v),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

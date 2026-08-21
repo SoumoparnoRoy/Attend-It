@@ -78,9 +78,8 @@ class _PickerChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
             border: Border.all(
-              color: selected
-                  ? accent.withValues(alpha: 0.6)
-                  : context.palette.outlineSoft,
+              color:
+                  selected ? accent.withValues(alpha: 0.6) : Colors.transparent,
             ),
           ),
           child: Row(

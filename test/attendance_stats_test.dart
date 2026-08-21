@@ -24,8 +24,7 @@ SubjectStats statsOf({
 void main() {
   group('percentages', () {
     test('cancelled classes are excluded from both sides of the ratio', () {
-      final SubjectStats stats =
-          statsOf(present: 8, absent: 2, cancelled: 5);
+      final SubjectStats stats = statsOf(present: 8, absent: 2, cancelled: 5);
       expect(stats.held, 10);
       expect(stats.percent, 80);
     });
@@ -62,8 +61,7 @@ void main() {
 
     test('skipping exactly the allowance keeps you on target', () {
       final SubjectStats stats = statsOf(present: 9, absent: 1);
-      final SubjectStats after =
-          statsOf(present: 9, absent: 1 + stats.canSkip);
+      final SubjectStats after = statsOf(present: 9, absent: 1 + stats.canSkip);
       expect(after.meetsTarget, isTrue);
 
       final SubjectStats oneMore =
@@ -85,8 +83,7 @@ void main() {
       final SubjectStats after = statsOf(present: 5 + need, absent: 5);
       expect(after.meetsTarget, isTrue);
 
-      final SubjectStats oneFewer =
-          statsOf(present: 5 + need - 1, absent: 5);
+      final SubjectStats oneFewer = statsOf(present: 5 + need - 1, absent: 5);
       expect(oneFewer.meetsTarget, isFalse);
     });
 
@@ -105,8 +102,7 @@ void main() {
     });
 
     test('below target but recoverable is at risk', () {
-      final SubjectStats stats =
-          statsOf(present: 5, absent: 5, remaining: 30);
+      final SubjectStats stats = statsOf(present: 5, absent: 5, remaining: 30);
       expect(stats.health, AttendanceHealth.atRisk);
       expect(stats.isUnrecoverable, isFalse);
     });
@@ -157,6 +153,65 @@ void main() {
       );
       expect(overall.hasData, isFalse);
       expect(overall.weakest, isNull);
+    });
+  });
+
+  group('the home screen verdict', () {
+    test('counts spare classes from the tightest subject, not the average', () {
+      // A healthy overall percentage says nothing about whether skipping the
+      // next class is safe — the subject with the least room decides that.
+      final OverallStats overall = OverallStats(
+        subjects: <SubjectStats>[
+          statsOf(present: 30, absent: 0),
+          statsOf(present: 3, absent: 1),
+        ],
+        target: 0.75,
+      );
+
+      expect(overall.percent, greaterThan(90));
+      expect(overall.canSkip, 0);
+      expect(overall.verdict, 'None to spare');
+    });
+
+    test('ignores subjects with nothing marked', () {
+      final OverallStats overall = OverallStats(
+        subjects: <SubjectStats>[
+          statsOf(present: 8, absent: 0),
+          statsOf(),
+        ],
+        target: 0.75,
+      );
+
+      expect(overall.canSkip, 2);
+      expect(overall.verdict, 'Two to spare');
+    });
+
+    test('sums the recovery runs when subjects are below target', () {
+      final OverallStats overall = OverallStats(
+        subjects: <SubjectStats>[
+          statsOf(present: 2, absent: 2, remaining: 20),
+          statsOf(present: 3, absent: 2, remaining: 20),
+        ],
+        target: 0.75,
+      );
+
+      expect(overall.needToAttend, 4 + 3);
+      expect(overall.verdict, 'Seven to make up');
+    });
+
+    test('an unreachable target is reported as such', () {
+      final OverallStats overall = OverallStats(
+        subjects: <SubjectStats>[statsOf(present: 1, absent: 9, remaining: 1)],
+        target: 0.75,
+      );
+
+      expect(overall.verdict, 'One out of reach');
+    });
+
+    test('says nothing rather than zero before anything is marked', () {
+      const OverallStats overall =
+          OverallStats(subjects: <SubjectStats>[], target: 0.75);
+      expect(overall.verdict, 'Nothing marked yet');
     });
   });
 }

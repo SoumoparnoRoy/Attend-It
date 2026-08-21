@@ -30,6 +30,15 @@ class ZeoliteApp extends ConsumerWidget {
         AppThemeMode.light => ThemeMode.light,
         AppThemeMode.dark => ThemeMode.dark,
       },
+      builder: (BuildContext context, Widget? child) {
+        final MediaQueryData mq = MediaQuery.of(context);
+        final double factor = AppScale.of(mq.size);
+        if (factor == 1) return child!;
+        return MediaQuery(
+          data: mq.copyWith(textScaler: ScaledText(mq.textScaler, factor)),
+          child: child!,
+        );
+      },
       home: const _Bootstrap(),
     );
   }
@@ -97,9 +106,21 @@ class _RootShellState extends State<RootShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(index: _index, children: _screens),
-      bottomNavigationBar: Container(
+      // A shadow rather than a rule: the tab row is the one piece of chrome
+      // that has to stay above the sheet, and a hairline read as one more
+      // divider among the day rules above it.
+      bottomNavigationBar: DecoratedBox(
         decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: context.palette.outlineSoft)),
+          color: context.palette.navSurface,
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: context.palette.isDark
+                  ? Colors.black.withValues(alpha: 0.5)
+                  : const Color(0x174C4696),
+              blurRadius: 16,
+              offset: const Offset(0, -2),
+            ),
+          ],
         ),
         child: NavigationBar(
           selectedIndex: _index,
@@ -111,8 +132,8 @@ class _RootShellState extends State<RootShell> {
               label: 'Today',
             ),
             NavigationDestination(
-              icon: Icon(Icons.calendar_view_week_outlined),
-              selectedIcon: Icon(Icons.calendar_view_week_rounded),
+              icon: Icon(Icons.view_week_outlined),
+              selectedIcon: Icon(Icons.view_week_rounded),
               label: 'Timetable',
             ),
             NavigationDestination(

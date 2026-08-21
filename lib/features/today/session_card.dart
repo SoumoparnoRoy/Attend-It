@@ -6,11 +6,13 @@ import '../../data/models/attendance_status.dart';
 import '../../data/models/class_session.dart';
 import '../../widgets/common.dart';
 
-/// One class on the Today screen, with the three one-tap attendance actions.
+/// One class on the Today screen, as a row on a timeline: times in a gutter, a
+/// spine in the subject's colour, and the class on a card.
 ///
 /// Tapping the status a class already has clears it, so a mis-tap is undone
-/// with the same button rather than a menu.
-class SessionCard extends StatelessWidget {
+/// with the same button. The three buttons collapse to a one-line verdict once
+/// the class is marked; tapping the card brings them back to correct it.
+class SessionCard extends StatefulWidget {
   const SessionCard({
     super.key,
     required this.session,
@@ -21,6 +23,7 @@ class SessionCard extends StatelessWidget {
     this.categoryName,
     this.tagName,
     this.onTag,
+    this.isNext = false,
   });
 
   final ClassSession session;
@@ -29,7 +32,7 @@ class SessionCard extends StatelessWidget {
   final VoidCallback? onLongPress;
   final bool showDate;
 
-  /// Category label (Lab, Theory, ...) shown as a pill, when the subject has one.
+  /// Category label (Lab, Theory, ...), when the subject has one.
   final String? categoryName;
 
   /// The mark's tag, already resolved to a name. Passed in rather than looked
@@ -41,168 +44,276 @@ class SessionCard extends StatelessWidget {
   /// is how the control stays invisible until Settings has one.
   final VoidCallback? onTag;
 
+  /// The next class still to happen, which earns the one badge on the screen.
+  final bool isNext;
+
+  @override
+  State<SessionCard> createState() => _SessionCardState();
+}
+
+class _SessionCardState extends State<SessionCard> {
+  bool _expanded = false;
+
+  bool get _showControls => _expanded || !widget.session.isMarked;
+
+  @override
+  void didUpdateWidget(covariant SessionCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Clearing a mark from the expanded controls returns the card to its
+    // unmarked state; leaving it flagged as expanded would then keep a card
+    // open for no reason once it is marked again.
+    if (!widget.session.isMarked) _expanded = false;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final Color subjectColor = session.subject.color;
-    final String? teacher = session.subject.teacher;
+    final AppPalette p = context.palette;
+    final ClassSession session = widget.session;
     final AttendanceStatus? status = session.status;
     final bool isCancelled = status == AttendanceStatus.cancelled;
-    final bool dimmed = isCancelled;
+    final Color spine = isCancelled ? p.textFaint : session.subject.color;
 
-    return SurfaceCard(
-      padding: EdgeInsets.zero,
-      borderColor: session.isOngoing
-          ? subjectColor.withValues(alpha: 0.55)
-          : (status != null
-              ? status.colorIn(context.palette).withValues(alpha: 0.25)
-              : context.palette.outlineSoft),
-      onLongPress: onLongPress,
-      child: Opacity(
-        opacity: dimmed ? 0.55 : 1,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          SizedBox(
+            // 12-hour times are half again as wide as "10:50", and a gutter
+            // sized for the short form wraps every one of them. Scaled with
+            // the type, since that is what it has to fit.
+            width: (widget.use24Hour ? 40.0 : 58.0) *
+                AppScale.of(MediaQuery.sizeOf(context)),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: <Widget>[
-                  // Subject colour spine.
-                  Container(width: 4, color: subjectColor),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.lg,
-                        AppSpacing.lg,
-                        AppSpacing.lg,
-                        AppSpacing.md,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Expanded(
-                                child: Text(
-                                  session.subject.name,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 16.5,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -0.3,
-                                    color: context.palette.textPrimary,
-                                    decoration: isCancelled
-                                        ? TextDecoration.lineThrough
-                                        : null,
-                                    decorationColor: context.palette.textTertiary,
-                                  ),
-                                ),
-                              ),
-                              if (session.isOngoing)
-                                Pill(
-                                  label: 'Now',
-                                  icon: Icons.play_arrow_rounded,
-                                  color: subjectColor,
-                                )
-                              else if (status != null)
-                                Pill(
-                                  label: status.label,
-                                  icon: status.icon,
-                                  color: status.colorIn(context.palette),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: AppSpacing.sm),
-                          Wrap(
-                            spacing: AppSpacing.md,
-                            runSpacing: AppSpacing.xs,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: <Widget>[
-                              _MetaItem(
-                                icon: Icons.schedule_rounded,
-                                text: Clock.formatRange(
-                                  session.startMinutes,
-                                  session.endMinutes,
-                                  use24Hour: use24Hour,
-                                ),
-                              ),
-                              if (session.room != null &&
-                                  session.room!.isNotEmpty)
-                                _MetaItem(
-                                  icon: Icons.place_outlined,
-                                  text: session.room!,
-                                ),
-                              if (teacher != null && teacher.isNotEmpty)
-                                _MetaItem(
-                                  icon: Icons.person_outline_rounded,
-                                  text: teacher,
-                                ),
-                              if (showDate)
-                                _MetaItem(
-                                  icon: Icons.event_outlined,
-                                  text: Dates.relativeLabel(session.date),
-                                ),
-                              if (categoryName != null &&
-                                  categoryName!.isNotEmpty)
-                                Pill(
-                                  label: categoryName!,
-                                  icon: Icons.category_outlined,
-                                  color: subjectColor,
-                                ),
-                              if (session.isExtra)
-                                Pill(
-                                  label: 'One-off',
-                                  icon: Icons.looks_one_outlined,
-                                  color: context.palette.cyan,
-                                ),
-                              if (tagName != null && tagName!.isNotEmpty)
-                                Pill(
-                                  label: '+$tagName',
-                                  color: context.palette.cyan,
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
+                  Text(
+                    Clock.format(
+                      session.startMinutes,
+                      use24Hour: widget.use24Hour,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.visible,
+                    softWrap: false,
+                    style: monoStyle(
+                      color: p.textPrimary,
+                      size: 10.5,
+                      weight: FontWeight.w700,
+                      height: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    Clock.format(
+                      session.endMinutes,
+                      use24Hour: widget.use24Hour,
+                    ),
+                    maxLines: 1,
+                    softWrap: false,
+                    style: monoStyle(
+                      color: p.textFaint,
+                      size: 9,
+                      height: 1.2,
                     ),
                   ),
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md,
-                0,
-                AppSpacing.md,
-                AppSpacing.md,
+          ),
+          const SizedBox(width: 12),
+          _Spine(color: spine),
+          const SizedBox(width: 12),
+          Expanded(child: _body(context)),
+        ],
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context) {
+    final AppPalette p = context.palette;
+    final ClassSession session = widget.session;
+    final AttendanceStatus? status = session.status;
+    final bool isCancelled = status == AttendanceStatus.cancelled;
+
+    return SurfaceCard(
+      padding: const EdgeInsets.fromLTRB(13, 12, 13, 12),
+      onTap: session.isMarked
+          ? () => setState(() => _expanded = !_expanded)
+          : null,
+      onLongPress: widget.onLongPress,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  session.subject.name,
+                  maxLines: 3,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.25,
+                    fontWeight: FontWeight.w700,
+                    color: isCancelled ? p.textTertiary : p.textPrimary,
+                    decoration: isCancelled ? TextDecoration.lineThrough : null,
+                    decorationColor: p.textFaint,
+                  ),
+                ),
               ),
-              child: Row(
-                children: <Widget>[
-                  for (final AttendanceStatus option
-                      in AttendanceStatus.values) ...<Widget>[
-                    Expanded(
-                      child: _StatusButton(
-                        status: option,
-                        selected: status == option,
-                        onTap: () => onMark(option),
-                      ),
-                    ),
-                    if (option != AttendanceStatus.values.last)
-                      const SizedBox(width: AppSpacing.sm),
-                  ],
-                  // Only once the class is marked: a tag labels a mark, so
-                  // offering one on an unmarked class would have nothing to
-                  // attach to. Marking itself stays a single tap.
-                  if (onTag != null && session.isMarked) ...<Widget>[
-                    const SizedBox(width: AppSpacing.sm),
-                    _TagButton(active: tagName != null, onTap: onTag!),
-                  ],
-                ],
+              const SizedBox(width: 8),
+              _badge(context),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(
+            _meta(),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 10.5,
+              height: 1.3,
+              fontWeight: FontWeight.w500,
+              color: p.textTertiary,
+            ),
+          ),
+          if (_showControls) _controls(context) else _verdict(context, status!),
+        ],
+      ),
+    );
+  }
+
+  /// One line under the name: everything the class *is*, in reading order.
+  /// A single sentence rather than a row of icon chips — the icons repeated
+  /// the same three shapes on every card and said nothing the words did not.
+  String _meta() {
+    final ClassSession session = widget.session;
+    final String? room = session.room;
+    final String? teacher = session.subject.teacher;
+    return <String>[
+      if (widget.showDate) Dates.relativeLabel(session.date),
+      if (room != null && room.isNotEmpty) room,
+      if (teacher != null && teacher.isNotEmpty) teacher,
+      if (widget.categoryName != null && widget.categoryName!.isNotEmpty)
+        widget.categoryName!,
+      if (session.isExtra) 'One-off',
+    ].join(' · ');
+  }
+
+  Widget _badge(BuildContext context) {
+    final AppPalette p = context.palette;
+    final ClassSession session = widget.session;
+    final AttendanceStatus? status = session.status;
+
+    if (session.isOngoing) {
+      return Pill(label: 'Now', color: p.accent);
+    }
+    if (status != null) {
+      return StatusDot(color: status.colorIn(p));
+    }
+    if (widget.isNext) {
+      return Pill(label: 'Next', color: p.accent);
+    }
+    return const SizedBox.shrink();
+  }
+
+  Widget _verdict(BuildContext context, AttendanceStatus status) {
+    final AppPalette p = context.palette;
+    final Color color = status.colorIn(p);
+    final String? tag = widget.tagName;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Text(
+              'Marked ${status.label.toLowerCase()}',
+              style: TextStyle(
+                fontSize: 10,
+                height: 1,
+                fontWeight: FontWeight.w700,
+                color: color,
               ),
             ),
+          ),
+          if (tag != null && tag.isNotEmpty) Pill(label: tag, color: p.cyan),
+        ],
+      ),
+    );
+  }
+
+  Widget _controls(BuildContext context) {
+    final AttendanceStatus? status = widget.session.status;
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        children: <Widget>[
+          for (final AttendanceStatus option
+              in AttendanceStatus.values) ...<Widget>[
+            Expanded(
+              child: _StatusButton(
+                status: option,
+                selected: status == option,
+                onTap: () => widget.onMark(option),
+              ),
+            ),
+            if (option != AttendanceStatus.values.last)
+              const SizedBox(width: 6),
           ],
-        ),
+          // Only once the class is marked: a tag labels a mark, so offering
+          // one on an unmarked class would have nothing to attach to.
+          if (widget.onTag != null && widget.session.isMarked) ...<Widget>[
+            const SizedBox(width: 6),
+            _TagButton(active: widget.tagName != null, onTap: widget.onTag!),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The vertical rule in the subject's colour, fading downward so a run of
+/// classes reads as one timeline rather than as a row of coloured bars.
+class _Spine extends StatelessWidget {
+  const _Spine({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 8,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          Positioned(
+            left: 3,
+            top: 0,
+            bottom: 0,
+            width: 2,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(2),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: <Color>[color, color.withValues(alpha: 0.12)],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            top: 4,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -221,45 +332,27 @@ class _StatusButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color color = status.colorIn(context.palette);
+    final AppPalette p = context.palette;
+    final Color color = status.colorIn(p);
     return Material(
-      color: selected ? color.withValues(alpha: 0.18) : context.palette.surfaceHigh,
+      color: selected ? color.withValues(alpha: 0.12) : p.surfaceHigh,
       borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-            border: Border.all(
-              color: selected
-                  ? color.withValues(alpha: 0.6)
-                  : context.palette.outlineSoft,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            status.label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 10.5,
+              height: 1,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+              color: selected ? color : p.textTertiary,
             ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Icon(
-                status.icon,
-                size: 16,
-                color: selected ? color : context.palette.textTertiary,
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  status.label,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    color: selected ? color : context.palette.textSecondary,
-                  ),
-                ),
-              ),
-            ],
           ),
         ),
       ),
@@ -271,7 +364,7 @@ class _TagButton extends StatelessWidget {
   const _TagButton({required this.active, required this.onTap});
 
   /// Whether a tag is already set. Kept to an icon either way: the tag's name
-  /// is already on the line above, and repeating it here would push the three
+  /// shows on the collapsed card, and repeating it here would push the three
   /// status buttons into ellipsis on a narrow phone.
   final bool active;
 
@@ -279,58 +372,23 @@ class _TagButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color accent = context.palette.cyan;
+    final AppPalette p = context.palette;
+    final Color accent = p.cyan;
     return Material(
-      color: active
-          ? accent.withValues(alpha: 0.18)
-          : context.palette.surfaceHigh,
+      color: active ? accent.withValues(alpha: 0.14) : p.surfaceHigh,
       borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-            border: Border.all(
-              color: active
-                  ? accent.withValues(alpha: 0.6)
-                  : context.palette.outlineSoft,
-            ),
-          ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Icon(
             Icons.sell_outlined,
-            size: 16,
-            color: active ? accent : context.palette.textTertiary,
+            size: 14,
+            color: active ? accent : p.textTertiary,
           ),
         ),
       ),
-    );
-  }
-}
-
-class _MetaItem extends StatelessWidget {
-  const _MetaItem({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Icon(icon, size: 14, color: context.palette.textTertiary),
-        const SizedBox(width: 5),
-        Text(
-          text,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: context.palette.textSecondary,
-          ),
-        ),
-      ],
     );
   }
 }

@@ -3,16 +3,18 @@ import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
 import '../../core/date_utils.dart';
 
-/// Horizontally scrollable strip of days used to move around the calendar.
+/// Horizontally scrollable strip of days, sitting on the header gradient.
 ///
-/// It renders a wide window either side of today and auto-scrolls the selected
-/// day into view, so jumping weeks is a flick rather than a date picker.
+/// Renders a wide window either side of today and scrolls the selection into
+/// view, so jumping weeks is a flick rather than a date picker. Cells are
+/// sized so exactly [_visibleDays] fit the viewport.
 class WeekStrip extends StatefulWidget {
   const WeekStrip({
     super.key,
     required this.selected,
     required this.onSelected,
     this.markers = const <int, DayMarker>{},
+    this.horizontalPadding = 20,
     this.pastDays = 60,
     this.futureDays = 120,
   });
@@ -23,6 +25,7 @@ class WeekStrip extends StatefulWidget {
   /// Per-day dot summary, keyed by [Dates.keyOf].
   final Map<int, DayMarker> markers;
 
+  final double horizontalPadding;
   final int pastDays;
   final int futureDays;
 
@@ -44,42 +47,40 @@ class DayMarker {
 }
 
 class _WeekStripState extends State<WeekStrip> {
-  static const double _itemWidth = 56;
-  static const double _itemSpacing = AppSpacing.sm;
+  static const int _visibleDays = 5;
+  static const double _gap = 6;
 
-  late final ScrollController _controller;
-  late final DateTime _first;
+  final ScrollController _controller = ScrollController();
 
-  @override
-  void initState() {
-    super.initState();
-    _first = Dates.addDays(Dates.today(), -widget.pastDays);
-    _controller = ScrollController(
-      initialScrollOffset: _offsetFor(widget.selected),
-    );
-  }
+  late final DateTime _first = Dates.addDays(Dates.today(), -widget.pastDays);
+
+  double _itemWidth = 56;
 
   @override
   void didUpdateWidget(covariant WeekStrip oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!Dates.isSameDay(oldWidget.selected, widget.selected)) {
-      _scrollTo(widget.selected);
+      _scrollTo(widget.selected, animate: true);
     }
   }
 
   double _offsetFor(DateTime date) {
     final int index = Dates.daysBetween(_first, date);
-    final double raw = index * (_itemWidth + _itemSpacing);
+    final double raw = index * (_itemWidth + _gap);
     // Nudge the selection towards the middle rather than the left edge.
-    return (raw - 2 * (_itemWidth + _itemSpacing)).clamp(0.0, double.infinity);
+    return (raw - 2 * (_itemWidth + _gap)).clamp(0.0, double.infinity);
   }
 
-  void _scrollTo(DateTime date) {
+  void _scrollTo(DateTime date, {bool animate = false}) {
     if (!_controller.hasClients) return;
     final double target = _offsetFor(date).clamp(
       0.0,
       _controller.position.maxScrollExtent,
     );
+    if (!animate) {
+      _controller.jumpTo(target);
+      return;
+    }
     _controller.animateTo(
       target,
       duration: const Duration(milliseconds: 320),
@@ -98,35 +99,59 @@ class _WeekStripState extends State<WeekStrip> {
     final int total = widget.pastDays + widget.futureDays + 1;
     final DateTime today = Dates.today();
 
-    return SizedBox(
-      height: 78,
-      child: ListView.separated(
-        controller: _controller,
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-        itemCount: total,
-        separatorBuilder: (_, __) => const SizedBox(width: _itemSpacing),
-        itemBuilder: (BuildContext context, int index) {
-          final DateTime date = Dates.addDays(_first, index);
-          final bool isSelected = Dates.isSameDay(date, widget.selected);
-          final bool isToday = Dates.isSameDay(date, today);
-          final DayMarker? marker = widget.markers[Dates.keyOf(date)];
-          return _DayCell(
-            date: date,
-            selected: isSelected,
-            isToday: isToday,
-            marker: marker,
-            width: _itemWidth,
-            onTap: () => widget.onSelected(date),
-          );
-        },
-      ),
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final double usable =
+            constraints.maxWidth - widget.horizontalPadding * 2;
+        final double width =
+            (usable - _gap * (_visibleDays - 1)) / _visibleDays;
+
+        // The first layout has to land on the selected day without an
+        // animation, and the offset depends on a width only known here.
+        if ((width - _itemWidth).abs() > 0.5 || !_controller.hasClients) {
+          _itemWidth = width;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _scrollTo(widget.selected);
+          });
+        }
+
+        // The pill is fixed-height chrome, so it has to grow with the system
+        // font rather than clip the date. Capped, because past 1.35 the five
+        // columns matter more than another point of size.
+        final double scale = MediaQuery.textScalerOf(context).scale(10) / 10;
+        final double capped = scale.clamp(1.0, 1.35);
+
+        return SizedBox(
+          height: 50 * capped,
+          child: ListView.separated(
+            controller: _controller,
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.symmetric(horizontal: widget.horizontalPadding),
+            itemCount: total,
+            separatorBuilder: (_, __) => const SizedBox(width: _gap),
+            itemBuilder: (BuildContext context, int index) {
+              final DateTime date = Dates.addDays(_first, index);
+              return MediaQuery.withClampedTextScaling(
+                maxScaleFactor: 1.35,
+                child: _DayPill(
+                  date: date,
+                  selected: Dates.isSameDay(date, widget.selected),
+                  isToday: Dates.isSameDay(date, today),
+                  marker: widget.markers[Dates.keyOf(date)],
+                  width: width,
+                  onTap: () => widget.onSelected(date),
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }
 
-class _DayCell extends StatelessWidget {
-  const _DayCell({
+class _DayPill extends StatelessWidget {
+  const _DayPill({
     required this.date,
     required this.selected,
     required this.isToday,
@@ -144,56 +169,51 @@ class _DayCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color background =
-        selected ? context.palette.accent : context.palette.surface;
-    final Color primaryText =
-        selected ? Colors.white : context.palette.textPrimary;
-    final Color secondaryText = selected
-        ? Colors.white.withValues(alpha: 0.8)
-        : context.palette.textTertiary;
+    final AppPalette p = context.palette;
+    final bool weekend =
+        date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
+
+    // The selected day is the one white object on the gradient, so it reads
+    // as lifted off it rather than as another translucent tile.
+    final Color ink = selected
+        ? p.gradientMid
+        : Colors.white.withValues(alpha: weekend ? 0.5 : 0.85);
 
     return SizedBox(
       width: width,
       child: Material(
-        color: background,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        color: selected
+            ? (p.isDark ? const Color(0xFFF2F2F7) : Colors.white)
+            : Colors.white.withValues(alpha: p.isDark ? 0.09 : 0.12),
+        borderRadius: BorderRadius.circular(14),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-              border: Border.all(
-                color: selected
-                    ? context.palette.accent
-                    : (isToday ? context.palette.accent : context.palette.outlineSoft),
-                width: isToday && !selected ? 1.4 : 1,
-              ),
-            ),
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(0, 8, 0, 7),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
                 Text(
                   Dates.weekdayShort(date).toUpperCase(),
                   style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.6,
-                    color: secondaryText,
+                    fontSize: 10,
+                    height: 1.1,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
+                    color: ink,
                   ),
                 ),
-                const SizedBox(height: 3),
                 Text(
                   '${date.day}',
                   style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.4,
-                    color: primaryText,
+                    fontSize: 14,
+                    height: 1.2,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
+                    color: ink,
                   ),
                 ),
-                const SizedBox(height: 5),
-                _Dots(marker: marker, selected: selected),
+                const SizedBox(height: 3),
+                _Dots(marker: marker, selected: selected, isToday: isToday),
               ],
             ),
           ),
@@ -204,35 +224,51 @@ class _DayCell extends StatelessWidget {
 }
 
 class _Dots extends StatelessWidget {
-  const _Dots({required this.selected, this.marker});
+  const _Dots({
+    required this.selected,
+    required this.isToday,
+    this.marker,
+  });
 
   final DayMarker? marker;
   final bool selected;
+  final bool isToday;
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette p = context.palette;
     final DayMarker? m = marker;
     if (m == null || m.count == 0) {
-      return const SizedBox(height: 5);
+      // Today keeps a mark even when empty, so the strip never loses its
+      // anchor while you scroll away from it.
+      if (!isToday || selected) return const SizedBox(height: 4);
+      return Container(
+        width: 4,
+        height: 4,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.45),
+          shape: BoxShape.circle,
+        ),
+      );
     }
-    final Color color = selected
-        ? Colors.white
-        : (m.hasUnmarked ? context.palette.warning : (m.color ?? context.palette.accent));
-    final int dots = m.count > 3 ? 3 : m.count;
+
+    final Color color = m.hasUnmarked
+        ? (selected ? p.warning : const Color(0xFFFFCE85))
+        : (selected
+            ? p.gradientMid.withValues(alpha: 0.55)
+            : Colors.white.withValues(alpha: 0.75));
+
     return SizedBox(
-      height: 5,
+      height: 4,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
-          for (int i = 0; i < dots; i++)
+          for (int i = 0; i < (m.count > 3 ? 3 : m.count); i++)
             Container(
               width: 4,
               height: 4,
               margin: const EdgeInsets.symmetric(horizontal: 1.2),
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-              ),
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
             ),
         ],
       ),

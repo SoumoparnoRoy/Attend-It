@@ -143,7 +143,7 @@ lib/
 ```
 
 The UI never touches SQL and the domain layer never imports Flutter, so the
-interesting logic is unit-testable without a device. `flutter test` runs 84
+interesting logic is unit-testable without a device. `flutter test` runs 206
 tests covering the schedule engine, the stats formulas, the attendance log, the
 notification gating rules and the light palette's contrast ratios.
 

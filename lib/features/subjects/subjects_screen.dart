@@ -10,6 +10,7 @@ import '../../data/models/subject.dart';
 import '../../domain/attendance_stats.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
+import '../../widgets/gradient_header.dart';
 import 'class_editor_sheets.dart';
 
 /// Every subject in one place: add, edit, recolour and delete.
@@ -25,44 +26,50 @@ class SubjectsScreen extends ConsumerWidget {
     final TimetableData? data = ref.watch(timetableProvider).value;
     // Already ordered by name from the repository.
     final List<Subject> subjects = data?.subjects ?? <Subject>[];
+    final int weekly = data?.slots.length ?? 0;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Subjects')),
-      body: subjects.isEmpty
-          ? Padding(
-              padding: const EdgeInsets.only(bottom: 60),
+    return PushScaffold(
+      title: 'Subjects',
+      subtitle: subjects.isEmpty
+          ? null
+          : '${subjects.length} ${subjects.length == 1 ? 'course' : 'courses'}'
+              ' · $weekly weekly ${weekly == 1 ? 'class' : 'classes'}',
+      floatingActionButton: subjects.isEmpty
+          ? null
+          : GradientFab(
+              label: 'Add subject',
+              onPressed: () => showSubjectEditor(context, ref),
+            ),
+      slivers: <Widget>[
+        if (subjects.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 40, bottom: 60),
               child: EmptyState(
                 icon: Icons.school_outlined,
                 title: 'No subjects yet',
-                message:
-                    'Add the courses you are taking. Classes hang off a subject, '
-                    'and your attendance is tracked per subject.',
+                message: 'Add the courses you are taking. Classes hang off a '
+                    'subject, and your attendance is tracked per subject.',
                 action: FilledButton.icon(
                   onPressed: () => showSubjectEditor(context, ref),
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('Add your first subject'),
                 ),
               ),
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                AppSpacing.lg,
-                AppSpacing.lg,
-                100,
-              ),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 96),
+            sliver: SliverList.separated(
               itemCount: subjects.length,
-              separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
               itemBuilder: (BuildContext context, int index) =>
                   _SubjectRow(subject: subjects[index]),
             ),
-      floatingActionButton: subjects.isEmpty
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => showSubjectEditor(context, ref),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add subject'),
-            ),
+          ),
+      ],
     );
   }
 }
@@ -105,6 +112,7 @@ class _SubjectRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final AppPalette p = context.palette;
     final TimetableData? data = ref.watch(timetableProvider).value;
     final int? id = subject.id;
     final SubjectStats? stats =
@@ -113,24 +121,25 @@ class _SubjectRow extends ConsumerWidget {
     final ClassCategory? category = data?.categoryFor(subject);
     final int classCount = _classCount(data, id);
 
+    // Code first: a theory course and its lab share a name up to one word, so
+    // the line has to lead with what differs. Totals live in the header, so
+    // the count only appears when it is zero.
     final String detail = <String>[
-      if (subject.code != null && subject.code!.isNotEmpty) subject.code!,
+      if (subject.code != null && subject.code!.isNotEmpty)
+        subject.code!.toUpperCase(),
+      if (category != null) category.name.toUpperCase(),
       if (subject.teacher != null && subject.teacher!.isNotEmpty)
         subject.teacher!,
-      if (category != null) category.name,
-      classCount == 1 ? '1 class' : '$classCount classes',
+      if (classCount == 0) 'no classes',
     ].join(' · ');
 
-    final Color percentColor =
-        healthColor(stats?.health ?? AttendanceHealth.empty, context.palette);
+    final Color percentColor = healthColor(
+      stats?.health ?? AttendanceHealth.empty,
+      p,
+    );
 
     return SurfaceCard(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.lg,
-        AppSpacing.md,
-        AppSpacing.sm,
-        AppSpacing.md,
-      ),
+      padding: const EdgeInsets.fromLTRB(13, 12, 4, 12),
       onTap: () => showSubjectEditor(context, ref, subject: subject),
       onLongPress: () => showSubjectColorPicker(context, ref, subject),
       child: Row(
@@ -138,55 +147,58 @@ class _SubjectRow extends ConsumerWidget {
           SubjectAvatar(
             initials: subject.initials,
             color: subject.color,
-            size: 40,
+            size: 36,
           ),
-          const SizedBox(width: AppSpacing.md),
+          const SizedBox(width: 11),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
                   subject.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  detail,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12.5,
-                    color: context.palette.textTertiary,
+                    height: 1.2,
+                    fontWeight: FontWeight.w700,
+                    color: p.textPrimary,
                   ),
                 ),
+                if (detail.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 4),
+                  Text(
+                    detail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: monoStyle(color: p.textTertiary, size: 9.5),
+                  ),
+                ],
               ],
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
+          const SizedBox(width: 8),
           Text(
             stats != null && stats.hasData
                 ? '${stats.percent.toStringAsFixed(0)}%'
                 : '—',
             style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-              color: percentColor,
+              fontSize: 14,
+              height: 1,
+              fontWeight:
+                  stats?.hasData ?? false ? FontWeight.w800 : FontWeight.w700,
+              letterSpacing: -0.3,
+              color:
+                  stats != null && stats.hasData ? percentColor : p.textFaint,
             ),
           ),
           PopupMenuButton<_SubjectAction>(
             icon: Icon(
               Icons.more_vert_rounded,
-              size: 20,
-              color: context.palette.textTertiary,
+              size: 18,
+              color: p.textFaint,
             ),
-            color: context.palette.surfaceHigh,
+            color: p.surface,
             onSelected: (_SubjectAction action) async {
               switch (action) {
                 case _SubjectAction.edit:
@@ -215,7 +227,7 @@ class _SubjectRow extends ConsumerWidget {
                 child: _MenuRow(
                   icon: Icons.delete_outline_rounded,
                   label: 'Delete',
-                  color: context.palette.absent,
+                  color: p.absent,
                 ),
               ),
             ],
@@ -271,7 +283,8 @@ class _SubjectRow extends ConsumerWidget {
       if (slots > 0) slots == 1 ? '1 weekly class' : '$slots weekly classes',
       if (extras > 0)
         extras == 1 ? '1 one-off class' : '$extras one-off classes',
-      if (marks > 0) marks == 1 ? '1 attendance mark' : '$marks attendance marks',
+      if (marks > 0)
+        marks == 1 ? '1 attendance mark' : '$marks attendance marks',
     ];
 
     final String message = losses.isEmpty
@@ -282,7 +295,6 @@ class _SubjectRow extends ConsumerWidget {
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        backgroundColor: context.palette.surfaceHigh,
         title: Text('Delete ${subject.name}?'),
         content: Text(message, style: const TextStyle(height: 1.4)),
         actions: <Widget>[
@@ -292,7 +304,8 @@ class _SubjectRow extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: context.palette.absent),
+            style:
+                TextButton.styleFrom(foregroundColor: context.palette.absent),
             child: const Text('Delete'),
           ),
         ],

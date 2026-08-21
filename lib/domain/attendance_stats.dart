@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../core/words.dart';
 import '../data/models/attendance_status.dart';
 import '../data/models/class_session.dart';
 import '../data/models/subject.dart';
@@ -92,7 +93,9 @@ class SubjectStats {
 
   /// True when even a perfect run from here cannot reach the target.
   bool get isUnrecoverable =>
-      !meetsTarget && remainingPlanned > 0 && maxAchievableRatio < target - 1e-9;
+      !meetsTarget &&
+      remainingPlanned > 0 &&
+      maxAchievableRatio < target - 1e-9;
 
   AttendanceHealth get health {
     if (!hasData) return AttendanceHealth.empty;
@@ -184,22 +187,60 @@ class OverallStats {
   bool get meetsTarget => held == 0 || ratio >= target - 1e-9;
 
   /// Subjects that have fallen below their own target.
-  List<SubjectStats> get atRisk => subjects
-      .where((SubjectStats s) => s.hasData && !s.meetsTarget)
-      .toList();
+  List<SubjectStats> get atRisk =>
+      subjects.where((SubjectStats s) => s.hasData && !s.meetsTarget).toList();
 
   /// Subjects sitting on the edge — one absence away from dropping below.
   List<SubjectStats> get tight => subjects
-      .where((SubjectStats s) =>
-          s.hasData && s.meetsTarget && s.canSkip == 0)
+      .where((SubjectStats s) => s.hasData && s.meetsTarget && s.canSkip == 0)
       .toList();
+
+  /// How many classes you can miss before something breaks. The binding
+  /// constraint is the tightest subject, not the aggregate — an overall 94% is
+  /// no comfort when one lab is sitting on its own target.
+  int get canSkip {
+    final List<SubjectStats> withData =
+        subjects.where((SubjectStats s) => s.hasData).toList();
+    if (withData.isEmpty) return 0;
+    return withData
+        .map((SubjectStats s) => s.canSkip)
+        .reduce((int a, int b) => a < b ? a : b);
+  }
+
+  /// Total classes that must be attended to bring every subject back to its
+  /// own target. A sum rather than a maximum, because two subjects below
+  /// target need both runs, not the longer of the two.
+  int get needToAttend => atRisk.fold<int>(
+        0,
+        (int sum, SubjectStats s) => sum + s.needToAttend,
+      );
+
+  /// The home screen's headline — the answer to "can I skip the next one?".
+  /// Here rather than in the widget so it can be tested without a device.
+  String get verdict {
+    if (!hasData) return 'Nothing marked yet';
+
+    final List<SubjectStats> lost = subjects
+        .where((SubjectStats s) => s.health == AttendanceHealth.lost)
+        .toList();
+    if (lost.isNotEmpty) {
+      return lost.length == 1
+          ? 'One out of reach'
+          : '${Words.count(lost.length)} out of reach';
+    }
+
+    if (atRisk.isNotEmpty) return '${Words.count(needToAttend)} to make up';
+
+    final int spare = canSkip;
+    return spare == 0 ? 'None to spare' : '${Words.count(spare)} to spare';
+  }
 
   SubjectStats? get weakest {
     final List<SubjectStats> withData =
         subjects.where((SubjectStats s) => s.hasData).toList();
     if (withData.isEmpty) return null;
-    withData.sort((SubjectStats a, SubjectStats b) =>
-        a.ratio.compareTo(b.ratio));
+    withData
+        .sort((SubjectStats a, SubjectStats b) => a.ratio.compareTo(b.ratio));
     return withData.first;
   }
 }

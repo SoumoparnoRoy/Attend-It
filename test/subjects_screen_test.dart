@@ -103,7 +103,7 @@ Widget _app(TimetableData data) {
 }
 
 void main() {
-  testWidgets('lists every subject with its code, category and class count',
+  testWidgets('leads each subject with its code, and totals in the header',
       (WidgetTester tester) async {
     await tester.pumpWidget(_app(_fixture()));
     await tester.pumpAndSettle();
@@ -112,10 +112,13 @@ void main() {
     expect(find.text('Physics'), findsOneWidget);
     expect(find.text('Mathematics'), findsOneWidget);
 
-    // 2 weekly slots + 1 one-off = 3 classes.
-    expect(find.text('PH101 · Lab · 3 classes'), findsOneWidget);
-    // No code, no category, nothing scheduled.
-    expect(find.text('0 classes'), findsOneWidget);
+    // The code leads, in mono, so a theory course and its lab stop reading as
+    // duplicates of each other. Per-subject counts moved to the header.
+    expect(find.text('PH101 · LAB'), findsOneWidget);
+    // Two weekly slots; the one-off is not a weekly class.
+    expect(find.text('2 courses · 2 weekly classes'), findsOneWidget);
+    // Nothing scheduled is the one count still worth saying inline.
+    expect(find.text('no classes'), findsOneWidget);
 
     expect(find.text('75%'), findsOneWidget); // 3 present of 4 held
     expect(find.text('—'), findsOneWidget); // Mathematics, nothing marked

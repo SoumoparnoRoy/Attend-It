@@ -71,7 +71,7 @@ class _RecordingActions extends TimetableActions {
 
 void main() {
   group('a tag on the class card', () {
-    testWidgets('shows as +Name under the class once set', (tester) async {
+    testWidgets('shows as a chip on the marked card', (tester) async {
       await tester.pumpWidget(
         _host(
           SessionCard(
@@ -84,7 +84,7 @@ void main() {
         ),
       );
 
-      expect(find.text('+Proxy'), findsOneWidget);
+      expect(find.text('PROXY'), findsOneWidget);
     });
 
     testWidgets('is absent from an untagged class', (tester) async {
@@ -99,7 +99,7 @@ void main() {
         ),
       );
 
-      expect(find.textContaining('+'), findsNothing);
+      expect(find.text('PROXY'), findsNothing);
     });
 
     testWidgets('the three statuses are still all there', (tester) async {
@@ -138,7 +138,8 @@ void main() {
       expect(find.byIcon(Icons.sell_outlined), findsNothing);
     });
 
-    testWidgets('appears once marked', (tester) async {
+    testWidgets('appears with the controls a marked card opens',
+        (tester) async {
       await tester.pumpWidget(
         _host(
           SessionCard(
@@ -149,6 +150,12 @@ void main() {
           ),
         ),
       );
+
+      // A marked card collapses to its verdict, so the controls — and the tag
+      // button with them — are one tap away rather than always on screen.
+      expect(find.byIcon(Icons.sell_outlined), findsNothing);
+      await tester.tap(find.text('Marked absent'));
+      await tester.pump();
 
       expect(find.byIcon(Icons.sell_outlined), findsOneWidget);
     });
@@ -182,6 +189,8 @@ void main() {
         ),
       );
 
+      await tester.tap(find.text('Marked present'));
+      await tester.pump();
       await tester.tap(find.byIcon(Icons.sell_outlined));
       await tester.pump();
 
@@ -224,6 +233,8 @@ void main() {
         ),
       );
 
+      await tester.tap(find.text('Marked present'));
+      await tester.pump();
       await tester.tap(find.text('Absent'));
       await tester.pump();
 
@@ -326,6 +337,29 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Tap the current tag to remove it.'), findsOneWidget);
+    });
+  });
+
+  group('the time gutter', () {
+    testWidgets('does not wrap a 12-hour time onto two lines', (tester) async {
+      // The gutter was sized for "10:50" and wrapped every "10:00 am" into
+      // three lines on the tablet.
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        _host(
+          SessionCard(
+            session: _session(),
+            use24Hour: false,
+            onMark: (_) {},
+          ),
+        ),
+      );
+
+      final double lineHeight = tester.getSize(find.text('9:00 am')).height;
+      expect(lineHeight, lessThan(20));
     });
   });
 }

@@ -115,6 +115,25 @@ void main() {
       expect(AppTheme.dark().scaffoldBackgroundColor, AppPalette.dark.canvas);
     });
 
+    test('a control on a sheet is never painted the sheet colour', () {
+      // Light's canvas and surfaceHigh hold the same value, so a control
+      // filled with surfaceHigh is invisible on a sheet — which is what a
+      // field and a secondary button both were.
+      for (final ThemeData theme in <ThemeData>[
+        AppTheme.light(),
+        AppTheme.dark(),
+      ]) {
+        final Color sheet = theme.bottomSheetTheme.modalBackgroundColor!;
+        expect(theme.inputDecorationTheme.fillColor, isNot(sheet));
+        expect(
+          theme.outlinedButtonTheme.style?.backgroundColor
+              ?.resolve(<WidgetState>{}),
+          isNot(sheet),
+          reason: 'outlined button on a sheet (${theme.brightness})',
+        );
+      }
+    });
+
     test('status bar icons invert between themes', () {
       expect(
         AppTheme.overlayStyleFor(AppPalette.dark).statusBarIconBrightness,
@@ -124,6 +143,38 @@ void main() {
         AppTheme.overlayStyleFor(AppPalette.light).statusBarIconBrightness,
         Brightness.dark,
       );
+    });
+  });
+
+  group('subject ink', () {
+    test('every stored subject colour becomes readable on a card', () {
+      // The palette is picked for identity on a tile, not for legibility as
+      // text: lime on white is about 1.5:1 raw.
+      for (final AppPalette p in <AppPalette>[
+        AppPalette.dark,
+        AppPalette.light,
+      ]) {
+        for (final int value in AppColors.subjectPalette) {
+          final Color ink = AppColors.inkOn(Color(value), p);
+          expect(
+            _contrast(ink, p.surface),
+            greaterThanOrEqualTo(4.5),
+            reason: '${value.toRadixString(16)} on ${p.brightness}',
+          );
+        }
+      }
+    });
+
+    test('keeps the hue, so a subject stays recognisable', () {
+      const Color lime = Color(0xFF9BE36D);
+      final double before = HSLColor.fromColor(lime).hue;
+      for (final AppPalette p in <AppPalette>[
+        AppPalette.dark,
+        AppPalette.light,
+      ]) {
+        final double after = HSLColor.fromColor(AppColors.inkOn(lime, p)).hue;
+        expect((after - before).abs(), lessThan(1));
+      }
     });
   });
 }

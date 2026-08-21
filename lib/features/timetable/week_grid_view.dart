@@ -17,18 +17,28 @@ import '../subjects/class_editor_sheets.dart';
 /// class spanning several blocks is then simply a taller tile in one column.
 /// Every column sums to the same height, so the blocks stay aligned across days
 /// without any of the arithmetic a row-spanning table would need.
+///
+/// All seven columns fit the screen — a grid that scrolls sideways loses the
+/// one thing it beats a list at. The price is a two-letter code per tile
+/// instead of the subject name.
 class WeekGridView extends ConsumerWidget {
   const WeekGridView({super.key, required this.weekStart});
 
   final DateTime weekStart;
 
-  static const double _blockHeight = 58;
-  static const double _gap = AppSpacing.xs;
-  static const double _gutterWidth = 58;
-  static const double _minColumnWidth = 92;
+  static const double _blockHeight = 46;
+  static const double _gap = 4;
+  static const double _gutterWidth = 34;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The cells carry text, so their geometry has to ride the same ramp the
+    // type does or the tablet gets bigger labels in phone-sized boxes.
+    final double scale = AppScale.of(MediaQuery.sizeOf(context));
+    final double blockHeight = _blockHeight * scale;
+    final double gap = _gap * scale;
+    final double gutterWidth = _gutterWidth * scale;
+
     final DayGrid grid = ref.watch(dayGridProvider);
     final ScheduleEngine? engine = ref.watch(scheduleEngineProvider);
     final bool use24Hour =
@@ -39,56 +49,46 @@ class WeekGridView extends ConsumerWidget {
     final Map<int, List<ClassSession>> byDay =
         engine?.sessionsForWeekOf(weekStart) ?? <int, List<ClassSession>>{};
 
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final double natural =
-            (constraints.maxWidth - _gutterWidth) / 7 - _gap;
-        final double columnWidth =
-            natural < _minColumnWidth ? _minColumnWidth : natural;
-
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              _HeaderRow(
-                weekStart: weekStart,
-                columnWidth: columnWidth,
-                gutterWidth: _gutterWidth,
-                gap: _gap,
-              ),
-              const SizedBox(height: _gap),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  _TimeGutter(
-                    grid: grid,
-                    use24Hour: use24Hour,
-                    blockHeight: _blockHeight,
-                    gap: _gap,
-                    width: _gutterWidth,
-                  ),
-                  for (int i = 0; i < 7; i++) ...<Widget>[
-                    const SizedBox(width: _gap),
-                    SizedBox(
-                      width: columnWidth,
-                      child: _DayColumn(
-                        date: Dates.addDays(weekStart, i),
-                        sessions: byDay[Dates.keyOf(Dates.addDays(weekStart, i))] ??
-                            const <ClassSession>[],
-                        grid: grid,
-                        use24Hour: use24Hour,
-                        blockHeight: _blockHeight,
-                        gap: _gap,
-                      ),
-                    ),
-                  ],
-                ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            SizedBox(width: gutterWidth),
+            for (int i = 0; i < 7; i++) ...<Widget>[
+              SizedBox(width: gap),
+              Expanded(child: _DayHeader(date: Dates.addDays(weekStart, i))),
+            ],
+          ],
+        ),
+        SizedBox(height: gap),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            _TimeGutter(
+              grid: grid,
+              use24Hour: use24Hour,
+              blockHeight: blockHeight,
+              gap: gap,
+              width: gutterWidth,
+            ),
+            for (int i = 0; i < 7; i++) ...<Widget>[
+              SizedBox(width: gap),
+              Expanded(
+                child: _DayColumn(
+                  date: Dates.addDays(weekStart, i),
+                  sessions: byDay[Dates.keyOf(Dates.addDays(weekStart, i))] ??
+                      const <ClassSession>[],
+                  grid: grid,
+                  use24Hour: use24Hour,
+                  blockHeight: blockHeight,
+                  gap: gap,
+                ),
               ),
             ],
-          ),
-        );
-      },
+          ],
+        ),
+      ],
     );
   }
 }
@@ -113,36 +113,6 @@ class _NotConfigured extends StatelessWidget {
   }
 }
 
-class _HeaderRow extends StatelessWidget {
-  const _HeaderRow({
-    required this.weekStart,
-    required this.columnWidth,
-    required this.gutterWidth,
-    required this.gap,
-  });
-
-  final DateTime weekStart;
-  final double columnWidth;
-  final double gutterWidth;
-  final double gap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: <Widget>[
-        SizedBox(width: gutterWidth),
-        for (int i = 0; i < 7; i++) ...<Widget>[
-          SizedBox(width: gap),
-          SizedBox(
-            width: columnWidth,
-            child: _DayHeader(date: Dates.addDays(weekStart, i)),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
 class _DayHeader extends StatelessWidget {
   const _DayHeader({required this.date});
 
@@ -150,41 +120,34 @@ class _DayHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette p = context.palette;
     final bool isToday = Dates.isSameDay(date, Dates.today());
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: isToday
-            ? context.palette.accent.withValues(alpha: 0.14)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-      ),
-      child: Column(
-        children: <Widget>[
-          Text(
-            kWeekdayNamesShort[date.weekday - 1].toUpperCase(),
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
-              color: isToday
-                  ? context.palette.accent
-                  : context.palette.textTertiary,
-            ),
+    final bool weekend =
+        date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
+    final Color ink =
+        isToday ? p.accent : (weekend ? p.textFaint : p.textTertiary);
+
+    return Column(
+      children: <Widget>[
+        Text(
+          kWeekdayNamesShort[date.weekday - 1].substring(0, 1).toUpperCase(),
+          style: TextStyle(
+            fontSize: 8.5,
+            height: 1.2,
+            fontWeight: isToday ? FontWeight.w800 : FontWeight.w700,
+            color: ink,
           ),
-          Text(
-            '${date.day}',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: isToday
-                  ? context.palette.accent
-                  : context.palette.textSecondary,
-            ),
+        ),
+        Text(
+          '${date.day}',
+          style: TextStyle(
+            fontSize: 8.5,
+            height: 1.2,
+            fontWeight: isToday ? FontWeight.w800 : FontWeight.w700,
+            color: ink,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -204,6 +167,20 @@ class _TimeGutter extends StatelessWidget {
   final double gap;
   final double width;
 
+  /// When a block starts, without the meridiem.
+  ///
+  /// The minutes have to stay: a 35-minute block would otherwise print
+  /// `9a, 9a, 10a, 10a` and the ruler would be lying. Dropping am/pm instead
+  /// costs nothing — this is an ordered column spanning one teaching day, so
+  /// there is no hour it could be confused with.
+  String _label(int index) {
+    final int minutes = grid.startOf(index);
+    final int hour = Clock.hourOf(minutes);
+    final String mm = Clock.minuteOf(minutes).toString().padLeft(2, '0');
+    if (use24Hour) return '${hour.toString().padLeft(2, '0')}:$mm';
+    return '${hour % 12 == 0 ? 12 : hour % 12}:$mm';
+  }
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -214,26 +191,17 @@ class _TimeGutter extends StatelessWidget {
             if (i > 0) SizedBox(height: gap),
             SizedBox(
               height: blockHeight,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  Text(
-                    '${i + 1}',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w800,
-                      color: context.palette.textSecondary,
-                    ),
+              child: Center(
+                child: Text(
+                  _label(i),
+                  maxLines: 1,
+                  softWrap: false,
+                  style: monoStyle(
+                    color: context.palette.textFaint,
+                    size: 8,
+                    weight: FontWeight.w700,
                   ),
-                  Text(
-                    Clock.format(grid.startOf(i), use24Hour: use24Hour),
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w600,
-                      color: context.palette.textTertiary,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ],
@@ -263,6 +231,9 @@ class _DayColumn extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final bool weekend =
+        date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
+
     // Group by the block each class starts in. Two classes in one block do
     // happen — a clash, or a subject entered twice — so a cell holds a list
     // rather than a single session.
@@ -288,6 +259,7 @@ class _DayColumn extends ConsumerWidget {
           SizedBox(
             height: blockHeight,
             child: _EmptyCell(
+              dimmed: weekend,
               onTap: () => showBlockClassEditor(
                 context,
                 ref,
@@ -343,30 +315,32 @@ class _DayColumn extends ConsumerWidget {
   }
 }
 
+/// A free block. Borderless — outlining forty of them was what made a mostly
+/// empty week look full — but it keeps a very faint plus, because tapping one
+/// is the only way into the block editor and an invisible affordance is not
+/// one.
 class _EmptyCell extends StatelessWidget {
-  const _EmptyCell({required this.onTap});
+  const _EmptyCell({required this.onTap, this.dimmed = false});
 
   final VoidCallback onTap;
+  final bool dimmed;
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette p = context.palette;
     return Material(
-      color: Colors.transparent,
+      color: p.isDark
+          ? Colors.white.withValues(alpha: dimmed ? 0.02 : 0.04)
+          : Colors.white.withValues(alpha: dimmed ? 0.28 : 0.5),
       borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-            border: Border.all(color: context.palette.outlineSoft),
-          ),
-          child: Center(
-            child: Icon(
-              Icons.add_rounded,
-              size: 15,
-              color: context.palette.textTertiary.withValues(alpha: 0.5),
-            ),
+        child: Center(
+          child: Icon(
+            Icons.add_rounded,
+            size: 12,
+            color: p.textFaint.withValues(alpha: dimmed ? 0.25 : 0.4),
           ),
         ),
       ),
@@ -395,71 +369,97 @@ class _ClassCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette p = context.palette;
     final Color color = session.subject.color;
     final AttendanceStatus? status = session.status;
     final bool cancelled = status == AttendanceStatus.cancelled;
 
-    return Material(
-      color: color.withValues(alpha: cancelled ? 0.08 : 0.18),
-      borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-            border: Border.all(color: color.withValues(alpha: 0.5)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      session.subject.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        height: 1.15,
-                        color: context.palette.textPrimary,
-                        decoration:
-                            cancelled ? TextDecoration.lineThrough : null,
-                        decorationColor: context.palette.textTertiary,
-                      ),
+    return Opacity(
+      opacity: cancelled ? 0.5 : 1,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+          boxShadow: p.isDark
+              ? const <BoxShadow>[]
+              : <BoxShadow>[
+                  BoxShadow(
+                    color: p.cardShadow,
+                    blurRadius: 9,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+        ),
+        child: Material(
+          color: p.surface,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            onLongPress: onLongPress,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Container(width: 3, color: color),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 5, 3, 5),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: <Widget>[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Expanded(
+                              child: Text(
+                                session.subject.initials,
+                                maxLines: 1,
+                                overflow: TextOverflow.clip,
+                                style: TextStyle(
+                                  fontSize: 8,
+                                  height: 1,
+                                  fontWeight: FontWeight.w800,
+                                  color: p.textPrimary,
+                                  decoration: cancelled
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                  decorationColor: p.textFaint,
+                                ),
+                              ),
+                            ),
+                            if (status != null && !cancelled)
+                              Container(
+                                width: 4,
+                                height: 4,
+                                margin: const EdgeInsets.only(top: 1),
+                                decoration: BoxDecoration(
+                                  color: status.colorIn(p),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                          ],
+                        ),
+                        Text(
+                          offGrid
+                              ? Clock.format(
+                                  session.startMinutes,
+                                  use24Hour: use24Hour,
+                                )
+                              : (session.room ?? ''),
+                          maxLines: 1,
+                          overflow: TextOverflow.clip,
+                          style: monoStyle(
+                            color: offGrid ? p.warning : p.textTertiary,
+                            size: 7,
+                            weight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  if (status != null)
-                    Icon(
-                      status.icon,
-                      size: 12,
-                      color: status.colorIn(context.palette),
-                    ),
-                ],
-              ),
-              const Spacer(),
-              Text(
-                <String>[
-                  if (offGrid)
-                    Clock.format(session.startMinutes, use24Hour: use24Hour),
-                  if (session.room != null && session.room!.isNotEmpty)
-                    session.room!,
-                ].join(' · '),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: offGrid
-                      ? context.palette.warning
-                      : context.palette.textTertiary,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

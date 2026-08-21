@@ -73,7 +73,7 @@ class _ChoiceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SurfaceCard(
-      color: context.palette.surfaceHigh,
+      color: context.palette.surfaceHigher,
       onTap: onTap,
       child: Row(
         children: <Widget>[
@@ -378,7 +378,6 @@ class _ColorDot extends StatelessWidget {
   }
 }
 
-
 /// Chooses which category a subject belongs to, with an inline "new category"
 /// escape hatch so the flow is never blocked by missing setup.
 class _CategoryPicker extends ConsumerWidget {
@@ -464,7 +463,7 @@ class _CategoryChip extends StatelessWidget {
     return Material(
       color: selected
           ? context.palette.accent.withValues(alpha: 0.18)
-          : context.palette.surfaceHigh,
+          : context.palette.surfaceHigher,
       borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
       child: InkWell(
         onTap: onTap,
@@ -476,7 +475,7 @@ class _CategoryChip extends StatelessWidget {
             border: Border.all(
               color: selected
                   ? context.palette.accent.withValues(alpha: 0.7)
-                  : context.palette.outlineSoft,
+                  : context.palette.outline,
             ),
           ),
           child: Row(
@@ -750,7 +749,7 @@ class _OptionChip extends StatelessWidget {
     return Material(
       color: selected
           ? context.palette.accent.withValues(alpha: 0.18)
-          : context.palette.surfaceHigh,
+          : context.palette.surfaceHigher,
       borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
       child: InkWell(
         onTap: onTap,
@@ -762,7 +761,7 @@ class _OptionChip extends StatelessWidget {
             border: Border.all(
               color: selected
                   ? context.palette.accent.withValues(alpha: 0.7)
-                  : context.palette.outlineSoft,
+                  : context.palette.outline,
             ),
           ),
           child: Text(
@@ -882,9 +881,8 @@ class _SlotFormState extends ConsumerState<_SlotForm> {
   }
 
   List<_ClassTime> _timesOn(int weekday) {
-    final List<_ClassTime> rows = _times
-        .where((_ClassTime time) => time.weekday == weekday)
-        .toList();
+    final List<_ClassTime> rows =
+        _times.where((_ClassTime time) => time.weekday == weekday).toList();
     rows.sort((_ClassTime a, _ClassTime b) =>
         a.startMinutes.compareTo(b.startMinutes));
     return rows;
@@ -1201,14 +1199,12 @@ class _SlotFormState extends ConsumerState<_SlotForm> {
           }),
         ),
         const SizedBox(height: AppSpacing.xl),
-
         SectionHeader(_isEditing ? 'Day' : 'Repeats on'),
         _WeekdaySelector(
           selected: days.toSet(),
           onToggle: _toggleWeekday,
         ),
         const SizedBox(height: AppSpacing.xl),
-
         SectionHeader(
           _isEditing ? 'Time and room' : 'Class times',
           trailing: Text(
@@ -1232,7 +1228,6 @@ class _SlotFormState extends ConsumerState<_SlotForm> {
             onPickEnd: (_ClassTime t) => _pickTime(t, isStart: false),
             onRemove: _removeTime,
           ),
-
         if (!_isEditing) ...<Widget>[
           const SizedBox(height: AppSpacing.xs),
           Text(
@@ -1247,7 +1242,6 @@ class _SlotFormState extends ConsumerState<_SlotForm> {
           ),
         ],
         const SizedBox(height: AppSpacing.xl),
-
         const SectionHeader('Runs from'),
         Row(
           children: <Widget>[
@@ -1275,7 +1269,6 @@ class _SlotFormState extends ConsumerState<_SlotForm> {
             ),
           ],
         ),
-
         if (_error != null) ...<Widget>[
           const SizedBox(height: AppSpacing.md),
           Text(
@@ -1427,7 +1420,7 @@ class _ClassTimeCard extends StatelessWidget {
         AppSpacing.md,
       ),
       decoration: BoxDecoration(
-        color: context.palette.surfaceHigh,
+        color: context.palette.surfaceHigher,
         borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         border: Border.all(color: context.palette.outline),
       ),
@@ -1444,7 +1437,8 @@ class _ClassTimeCard extends StatelessWidget {
                 padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm),
                 child: Text(
                   '–',
-                  style: TextStyle(color: context.palette.textTertiary, fontSize: 13),
+                  style: TextStyle(
+                      color: context.palette.textTertiary, fontSize: 13),
                 ),
               ),
               _TimeChip(
@@ -1509,7 +1503,7 @@ class _RoomField extends ConsumerWidget {
             ),
             hintText: 'Room (optional)',
             filled: true,
-            fillColor: context.palette.surfaceHigher,
+            fillColor: context.palette.surface,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.sm,
               vertical: AppSpacing.md,
@@ -1571,7 +1565,7 @@ class _RoomPickChip extends StatelessWidget {
             border: Border.all(
               color: selected
                   ? context.palette.accent.withValues(alpha: 0.7)
-                  : context.palette.outlineSoft,
+                  : context.palette.outline,
             ),
           ),
           child: Text(
@@ -1599,7 +1593,7 @@ class _TimeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: context.palette.surfaceHigher,
+      color: context.palette.surface,
       borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
       child: InkWell(
         onTap: onTap,
@@ -1608,7 +1602,6 @@ class _TimeChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-            border: Border.all(color: context.palette.outline),
           ),
           child: Text(
             label,
@@ -2021,7 +2014,6 @@ class _BlockClassFormState extends ConsumerState<_BlockClassForm> {
           }),
         ),
         const SizedBox(height: AppSpacing.xl),
-
         SectionHeader(
           'Length',
           trailing: Text(
@@ -2058,11 +2050,9 @@ class _BlockClassFormState extends ConsumerState<_BlockClassForm> {
           ),
         ),
         const SizedBox(height: AppSpacing.xl),
-
         const SectionHeader('Room'),
         _RoomField(controller: _room),
         const SizedBox(height: AppSpacing.xl),
-
         const SectionHeader('Repeats'),
         Wrap(
           spacing: AppSpacing.sm,
@@ -2114,7 +2104,6 @@ class _BlockClassFormState extends ConsumerState<_BlockClassForm> {
               color: context.palette.textTertiary,
             ),
           ),
-
         if (_error != null) ...<Widget>[
           const SizedBox(height: AppSpacing.md),
           Text(
@@ -2154,7 +2143,7 @@ class _SubjectPicker extends ConsumerWidget {
         const SectionHeader('Subject'),
         if (subjects.isEmpty)
           SurfaceCard(
-            color: context.palette.surfaceHigh,
+            color: context.palette.surfaceHigher,
             onTap: () async {
               final int? id = await showSubjectEditor(context, ref);
               if (id != null) onChanged(id);
@@ -2216,7 +2205,9 @@ class _SubjectChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final Color color = subject.color;
     return Material(
-      color: selected ? color.withValues(alpha: 0.18) : context.palette.surfaceHigh,
+      color: selected
+          ? color.withValues(alpha: 0.18)
+          : context.palette.surfaceHigher,
       borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
       child: InkWell(
         onTap: onTap,
@@ -2228,7 +2219,7 @@ class _SubjectChip extends StatelessWidget {
             border: Border.all(
               color: selected
                   ? color.withValues(alpha: 0.7)
-                  : context.palette.outlineSoft,
+                  : context.palette.outline,
             ),
           ),
           child: Row(
@@ -2245,7 +2236,9 @@ class _SubjectChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13.5,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected ? context.palette.textPrimary : context.palette.textSecondary,
+                  color: selected
+                      ? context.palette.textPrimary
+                      : context.palette.textSecondary,
                 ),
               ),
             ],
@@ -2273,7 +2266,8 @@ class _NewSubjectChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-            border: Border.all(color: context.palette.accent.withValues(alpha: 0.5)),
+            border: Border.all(
+                color: context.palette.accent.withValues(alpha: 0.5)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -2335,7 +2329,7 @@ class _WeekdayCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? context.palette.accent : context.palette.surfaceHigh,
+      color: selected ? context.palette.accent : context.palette.surfaceHigher,
       borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
       child: InkWell(
         onTap: onTap,
@@ -2346,7 +2340,7 @@ class _WeekdayCell extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
             border: Border.all(
-              color: selected ? context.palette.accent : context.palette.outlineSoft,
+              color: selected ? context.palette.accent : Colors.transparent,
             ),
           ),
           child: Text(
@@ -2382,7 +2376,7 @@ class _FieldButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: context.palette.surfaceHigh,
+      color: context.palette.surfaceHigher,
       borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
       child: InkWell(
         onTap: onTap,
@@ -2394,7 +2388,6 @@ class _FieldButton extends StatelessWidget {
           ),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-            border: Border.all(color: context.palette.outline),
           ),
           child: Row(
             children: <Widget>[
@@ -2592,9 +2585,10 @@ class _OptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color color = danger ? context.palette.absent : context.palette.textPrimary;
+    final Color color =
+        danger ? context.palette.absent : context.palette.textPrimary;
     return SurfaceCard(
-      color: context.palette.surfaceHigh,
+      color: context.palette.surfaceHigher,
       onTap: onTap,
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(

@@ -2,20 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/date_utils.dart';
+import '../../core/words.dart';
+import '../../data/models/attendance_status.dart';
 import '../../data/models/subject.dart';
 import '../../data/settings/app_settings.dart';
-import '../../core/date_utils.dart';
-import '../../data/models/attendance_status.dart';
 import '../../domain/attendance_stats.dart';
 import '../../domain/tag_stats.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
+import '../../widgets/gradient_header.dart';
 import '../subjects/attendance_log_screen.dart';
 import '../subjects/class_editor_sheets.dart';
 
 /// Attendance overview: where you stand, and how much room you have left.
 class StatsScreen extends ConsumerWidget {
   const StatsScreen({super.key});
+
+  static const double _pad = 20;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -30,128 +34,67 @@ class StatsScreen extends ConsumerWidget {
         .toList();
     final bool hasTags = tagged.isNotEmpty;
 
-    return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: CustomScrollView(
-          slivers: <Widget>[
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.lg,
-                  AppSpacing.lg,
-                  AppSpacing.lg,
-                ),
-                child: Text(
-                  'Attendance',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -1,
-                  ),
-                ),
+    return GradientScaffold(
+      headerGap: 18,
+      header: _OverallHeader(stats: stats, settings: settings),
+      slivers: <Widget>[
+        if (stats.subjects.isEmpty)
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Padding(
+              padding: EdgeInsets.only(top: 40, bottom: 80),
+              child: EmptyState(
+                icon: Icons.insights_outlined,
+                title: 'No data yet',
+                message: 'Add subjects and mark a few classes — your '
+                    'percentages and skip allowance appear here.',
               ),
             ),
+          )
+        else ...<Widget>[
+          const SliverPadding(
+            padding: EdgeInsets.fromLTRB(_pad, 0, _pad, 0),
+            sliver: SliverToBoxAdapter(child: SectionHeader('By subject')),
+          ),
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(_pad, 0, _pad, hasTags ? 24 : 88),
+            sliver: SliverList.separated(
+              itemCount: stats.subjects.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 11),
+              itemBuilder: (BuildContext context, int index) {
+                final SubjectStats subjectStats = stats.subjects[index];
+                return _SubjectStatsCard(
+                  stats: subjectStats,
+                  onTap: () => _showSubjectDetail(context, ref, subjectStats),
+                );
+              },
+            ),
+          ),
 
-            if (stats.subjects.isEmpty)
-              const SliverFillRemaining(
-                hasScrollBody: false,
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: 80),
-                  child: EmptyState(
-                    icon: Icons.insights_outlined,
-                    title: 'No data yet',
-                    message:
-                        'Add subjects and mark a few classes — your percentages and skip allowance appear here.',
-                  ),
-                ),
-              )
-            else ...<Widget>[
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  0,
-                  AppSpacing.lg,
-                  AppSpacing.xl,
-                ),
-                sliver: SliverToBoxAdapter(
-                  child: _OverallPanel(stats: stats, settings: settings),
-                ),
+          // Only once something is actually tagged. An install that never
+          // opens the Tags setting never learns this section exists, which
+          // is the point — the screen it replaces was already full.
+          if (hasTags) ...<Widget>[
+            const SliverPadding(
+              padding: EdgeInsets.fromLTRB(_pad, 0, _pad, 0),
+              sliver: SliverToBoxAdapter(child: SectionHeader('By tag')),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(_pad, 0, _pad, 88),
+              sliver: SliverList.separated(
+                itemCount: tagged.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 11),
+                itemBuilder: (BuildContext context, int index) {
+                  return _TagCard(
+                    breakdown: tagged[index],
+                    use24Hour: settings.use24HourTime,
+                  );
+                },
               ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  0,
-                  AppSpacing.lg,
-                  0,
-                ),
-                sliver: const SliverToBoxAdapter(
-                  child: SectionHeader('By subject'),
-                ),
-              ),
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  0,
-                  AppSpacing.lg,
-                  hasTags ? AppSpacing.xl : 100,
-                ),
-                sliver: SliverList.separated(
-                  itemCount: stats.subjects.length,
-                  separatorBuilder: (_, __) =>
-                      const SizedBox(height: AppSpacing.md),
-                  itemBuilder: (BuildContext context, int index) {
-                    final SubjectStats subjectStats = stats.subjects[index];
-                    return _SubjectStatsCard(
-                      stats: subjectStats,
-                      onTap: () =>
-                          _showSubjectDetail(context, ref, subjectStats),
-                    );
-                  },
-                ),
-              ),
-
-              // Only once something is actually tagged. An install that never
-              // opens the Tags setting never learns this section exists, which
-              // is the point — the screen it replaces was already full.
-              if (hasTags) ...<Widget>[
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    0,
-                    AppSpacing.lg,
-                    0,
-                  ),
-                  sliver: const SliverToBoxAdapter(
-                    child: SectionHeader('By tag'),
-                  ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    0,
-                    AppSpacing.lg,
-                    100,
-                  ),
-                  sliver: SliverList.separated(
-                    itemCount: tagged.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: AppSpacing.md),
-                    itemBuilder: (BuildContext context, int index) {
-                      final TagBreakdown breakdown = tagged[index];
-                      return _TagCard(
-                        breakdown: breakdown,
-                        use24Hour: settings.use24HourTime,
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ],
+            ),
           ],
-        ),
-      ),
+        ],
+      ],
     );
   }
 
@@ -168,130 +111,127 @@ class StatsScreen extends ConsumerWidget {
   }
 }
 
-class _OverallPanel extends StatelessWidget {
-  const _OverallPanel({required this.stats, required this.settings});
+/// The term's percentage, set in type at the size the ring used to be. The
+/// ring spent its whole area on one number; the three counts it hid now sit
+/// beside it as a legend.
+class _OverallHeader extends StatelessWidget {
+  const _OverallHeader({required this.stats, required this.settings});
 
   final OverallStats stats;
   final AppSettings settings;
 
   @override
   Widget build(BuildContext context) {
-    final Color color = stats.meetsTarget ? context.palette.present : context.palette.absent;
-
-    return SurfaceCard(
-      padding: const EdgeInsets.all(AppSpacing.xl),
-      child: Column(
-        children: <Widget>[
-          Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 16, 20, 0),
+          child: HeaderEyebrow('Attendance · this term'),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
-              ProgressRing(
-                value: stats.ratio,
-                color: color,
-                targetValue: stats.target,
-                size: 104,
-                strokeWidth: 10,
-                caption: 'attended',
+              HeaderNumber(
+                stats.hasData ? '${stats.percent.round()}' : '—',
+                size: 60,
+                unit: stats.hasData ? '%' : '',
               ),
-              const SizedBox(width: AppSpacing.xl),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    _StatLine(
-                      label: 'Attended',
-                      value: '${stats.present}',
-                      color: context.palette.present,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    _StatLine(
-                      label: 'Missed',
-                      value: '${stats.absent}',
-                      color: context.palette.absent,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    _StatLine(
-                      label: 'Cancelled',
-                      value: '${stats.cancelled}',
-                      color: context.palette.cancelled,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (settings.hasSemester) ...<Widget>[
-            const SizedBox(height: AppSpacing.xl),
-            const Divider(),
-            const SizedBox(height: AppSpacing.lg),
-            Row(
-              children: <Widget>[
-                Icon(
-                  Icons.timelapse_rounded,
-                  size: 16,
-                  color: context.palette.textTertiary,
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(
-                    'Semester ${(settings.semesterProgress * 100).round()}% done · '
-                    '${settings.daysLeftInSemester} days left',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w500,
-                      color: context.palette.textSecondary,
-                    ),
+              const SizedBox(width: 16),
+              // Capped, not just Expanded: on a wide column a label/value pair
+              // stretched to the full width leaves the count stranded half a
+              // screen from the word it belongs to.
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 190),
+                  child: Column(
+                    children: <Widget>[
+                      _LegendLine(label: 'Attended', value: stats.present),
+                      const SizedBox(height: 7),
+                      _LegendLine(label: 'Missed', value: stats.absent),
+                      const SizedBox(height: 7),
+                      _LegendLine(
+                        label: 'Cancelled',
+                        value: stats.cancelled,
+                        // Cancelled counts towards neither side of the
+                        // percentage, so its line reads quieter than the two
+                        // that do.
+                        dimmed: true,
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
+              const Spacer(),
+            ],
+          ),
+        ),
+        if (settings.hasSemester) ...<Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            child: HeaderMeter(value: settings.semesterProgress),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+            child: Text(
+              'Semester ${(settings.semesterProgress * 100).round()}% done · '
+              '${Words.plural(settings.daysLeftInSemester, 'day')} left',
+              style: TextStyle(
+                fontSize: 10.5,
+                height: 1,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withValues(alpha: 0.75),
+              ),
             ),
-            const SizedBox(height: AppSpacing.sm),
-            TargetBar(
-              value: settings.semesterProgress,
-              color: context.palette.accent,
-              height: 6,
-            ),
-          ],
+          ),
         ],
-      ),
+      ],
     );
   }
 }
 
-class _StatLine extends StatelessWidget {
-  const _StatLine({
+class _LegendLine extends StatelessWidget {
+  const _LegendLine({
     required this.label,
     required this.value,
-    required this.color,
+    this.dimmed = false,
   });
 
   final String label;
-  final String value;
-  final Color color;
+  final int value;
+  final bool dimmed;
 
   @override
   Widget build(BuildContext context) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: <Widget>[
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
+        // The count is the point of the line, so the label is the half that
+        // gives way when the system font is scaled up.
+        Flexible(
           child: Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 13,
-              color: context.palette.textSecondary,
+              fontSize: 11,
+              height: 1,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: dimmed ? 0.6 : 0.85),
             ),
           ),
         ),
+        const SizedBox(width: 6),
         Text(
-          value,
-          style: const TextStyle(
-            fontSize: 15,
+          '$value',
+          style: TextStyle(
+            fontFamily: AppFonts.mono,
+            fontSize: 11,
+            height: 1,
             fontWeight: FontWeight.w700,
+            color: Colors.white.withValues(alpha: dimmed ? 0.8 : 1),
           ),
         ),
       ],
@@ -307,11 +247,13 @@ class _SubjectStatsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette p = context.palette;
     final Subject subject = stats.subject;
-    final Color healthTint = healthColor(stats.health, context.palette);
+    final Color tint = healthColor(stats.health, p);
 
     return SurfaceCard(
       onTap: onTap,
+      padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -320,77 +262,69 @@ class _SubjectStatsCard extends StatelessWidget {
               SubjectAvatar(
                 initials: subject.initials,
                 color: subject.color,
-                size: 40,
+                size: 34,
               ),
-              const SizedBox(width: AppSpacing.md),
+              const SizedBox(width: 11),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
                       subject.name,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 15.5,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.2,
                         fontWeight: FontWeight.w700,
-                        letterSpacing: -0.2,
+                        color: p.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
                       stats.hasData
                           ? '${stats.present} of ${stats.held} attended'
-                          : 'Nothing marked yet',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        color: context.palette.textTertiary,
-                      ),
+                          : 'nothing marked yet',
+                      style: monoStyle(color: p.textTertiary, size: 10),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 stats.hasData ? '${stats.percent.toStringAsFixed(0)}%' : '—',
                 style: TextStyle(
-                  fontSize: 20,
+                  fontSize: 16,
+                  height: 1,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: -0.6,
-                  color: healthTint,
+                  letterSpacing: -0.4,
+                  color: stats.hasData ? tint : p.textFaint,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
-          TargetBar(
-            value: stats.ratio,
-            color: healthFill(stats.health, context.palette),
-            target: stats.target,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: <Widget>[
-              Icon(
-                stats.meetsTarget
-                    ? Icons.check_circle_outline_rounded
-                    : Icons.error_outline_rounded,
-                size: 14,
-                color: healthTint,
+          if (stats.hasData) ...<Widget>[
+            const SizedBox(height: 11),
+            TargetBar(
+              value: stats.ratio,
+              color: healthFill(stats.health, p),
+              target: stats.target,
+            ),
+            const SizedBox(height: 5),
+            Text(
+              stats.headline,
+              maxLines: 2,
+              style: TextStyle(
+                fontSize: 10.5,
+                height: 1.3,
+                fontWeight: FontWeight.w600,
+                // Calm by default. The colour is spent only on the subjects
+                // that actually need attention, so a screen of healthy ones
+                // reads as one quiet grey column.
+                color: stats.meetsTarget ? p.textTertiary : tint,
               ),
-              const SizedBox(width: 5),
-              Expanded(
-                child: Text(
-                  stats.headline,
-                  maxLines: 2,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: healthTint,
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ],
       ),
     );
@@ -404,7 +338,13 @@ class _SubjectDetail extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final AppPalette p = context.palette;
     final Subject subject = stats.subject;
+    final String meta = <String>[
+      if (subject.code != null && subject.code!.isNotEmpty) subject.code!,
+      if (subject.teacher != null && subject.teacher!.isNotEmpty)
+        subject.teacher!,
+    ].join(' · ');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -414,32 +354,28 @@ class _SubjectDetail extends ConsumerWidget {
             SubjectAvatar(
               initials: subject.initials,
               color: subject.color,
-              size: 52,
+              size: 48,
             ),
             const SizedBox(width: AppSpacing.lg),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(
-                    <String>[
-                      if (subject.code != null && subject.code!.isNotEmpty)
-                        subject.code!,
-                      if (subject.teacher != null &&
-                          subject.teacher!.isNotEmpty)
-                        subject.teacher!,
-                    ].join(' · '),
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: context.palette.textSecondary,
+                  if (meta.isNotEmpty) ...<Widget>[
+                    Text(
+                      meta,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: monoStyle(color: p.textTertiary, size: 11),
                     ),
-                  ),
-                  const SizedBox(height: 2),
+                    const SizedBox(height: 5),
+                  ],
                   Text(
                     'Target ${(stats.target * 100).round()}%',
                     style: TextStyle(
-                      fontSize: 12.5,
-                      color: context.palette.textTertiary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: p.textSecondary,
                     ),
                   ),
                 ],
@@ -454,7 +390,7 @@ class _SubjectDetail extends ConsumerWidget {
               child: _MetricTile(
                 label: 'Attended',
                 value: '${stats.present}',
-                color: context.palette.present,
+                color: p.present,
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
@@ -462,7 +398,7 @@ class _SubjectDetail extends ConsumerWidget {
               child: _MetricTile(
                 label: 'Missed',
                 value: '${stats.absent}',
-                color: context.palette.absent,
+                color: p.absent,
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
@@ -470,7 +406,7 @@ class _SubjectDetail extends ConsumerWidget {
               child: _MetricTile(
                 label: 'Cancelled',
                 value: '${stats.cancelled}',
-                color: context.palette.cancelled,
+                color: p.cancelled,
               ),
             ),
           ],
@@ -482,7 +418,7 @@ class _SubjectDetail extends ConsumerWidget {
               child: _MetricTile(
                 label: 'Can skip',
                 value: stats.meetsTarget ? '${stats.canSkip}' : '0',
-                color: context.palette.accent,
+                color: p.accent,
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
@@ -490,7 +426,7 @@ class _SubjectDetail extends ConsumerWidget {
               child: _MetricTile(
                 label: 'Must attend',
                 value: '${stats.needToAttend}',
-                color: context.palette.warning,
+                color: p.warning,
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
@@ -498,14 +434,16 @@ class _SubjectDetail extends ConsumerWidget {
               child: _MetricTile(
                 label: 'Left in term',
                 value: '${stats.remainingPlanned}',
-                color: context.palette.cyan,
+                color: p.cyan,
               ),
             ),
           ],
         ),
         const SizedBox(height: AppSpacing.xl),
         SurfaceCard(
-          color: context.palette.surfaceHigh,
+          elevated: false,
+          color: p.surfaceHigh,
+          padding: const EdgeInsets.all(14),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -513,18 +451,18 @@ class _SubjectDetail extends ConsumerWidget {
                 stats.meetsTarget
                     ? Icons.check_circle_outline_rounded
                     : Icons.error_outline_rounded,
-                size: 18,
-                color:
-                    stats.meetsTarget ? context.palette.present : context.palette.absent,
+                size: 17,
+                color: healthColor(stats.health, p),
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Text(
                   stats.headline,
-                  style: const TextStyle(
-                    fontSize: 13.5,
-                    height: 1.35,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.4,
                     fontWeight: FontWeight.w600,
+                    color: p.textPrimary,
                   ),
                 ),
               ),
@@ -537,9 +475,9 @@ class _SubjectDetail extends ConsumerWidget {
             'Attending every remaining class would put you at '
             '${(stats.maxAchievableRatio * 100).toStringAsFixed(0)}%.',
             style: TextStyle(
-              fontSize: 12.5,
+              fontSize: 11.5,
               height: 1.4,
-              color: context.palette.textTertiary,
+              color: p.textTertiary,
             ),
           ),
         ],
@@ -579,10 +517,8 @@ class _SubjectDetail extends ConsumerWidget {
               child: OutlinedButton.icon(
                 onPressed: () => _confirmDelete(context, ref, subject),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: context.palette.absent,
-                  side: BorderSide(
-                    color: context.palette.absent.withValues(alpha: 0.4),
-                  ),
+                  foregroundColor: p.absent,
+                  backgroundColor: p.absent.withValues(alpha: 0.1),
                 ),
                 icon: const Icon(Icons.delete_outline_rounded, size: 18),
                 label: const Text('Delete'),
@@ -602,7 +538,6 @@ class _SubjectDetail extends ConsumerWidget {
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        backgroundColor: context.palette.surfaceHigh,
         title: Text('Delete ${subject.name}?'),
         content: const Text(
           'This also removes its classes and all attendance history. '
@@ -616,7 +551,9 @@ class _SubjectDetail extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: context.palette.absent),
+            style: TextButton.styleFrom(
+              foregroundColor: context.palette.absent,
+            ),
             child: const Text('Delete'),
           ),
         ],
@@ -645,35 +582,34 @@ class _MetricTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette p = context.palette;
     return Container(
-      padding: const EdgeInsets.symmetric(
-        vertical: AppSpacing.md,
-        horizontal: AppSpacing.sm,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
       decoration: BoxDecoration(
-        color: context.palette.surfaceHigh,
+        color: p.surfaceHigh,
         borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-        border: Border.all(color: context.palette.outlineSoft),
       ),
       child: Column(
         children: <Widget>[
           Text(
             value,
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 19,
+              height: 1,
               fontWeight: FontWeight.w800,
-              letterSpacing: -0.6,
+              letterSpacing: -0.5,
               color: color,
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 5),
           Text(
             label,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 10,
+              height: 1,
               fontWeight: FontWeight.w600,
-              color: context.palette.textTertiary,
+              color: p.textTertiary,
             ),
           ),
         ],
@@ -697,21 +633,27 @@ class _TagCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color accent = context.palette.cyan;
+    final AppPalette p = context.palette;
+    final Color accent = p.cyan;
     return SurfaceCard(
       onTap: () => _showDetail(context),
+      padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
       child: Row(
         children: <Widget>[
           Container(
-            width: 36,
-            height: 36,
+            width: 34,
+            height: 34,
             decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+              color: accent.withValues(alpha: p.isDark ? 0.18 : 0.14),
+              borderRadius: BorderRadius.circular(11),
             ),
-            child: Icon(Icons.sell_outlined, size: 18, color: accent),
+            child: Icon(
+              Icons.sell_outlined,
+              size: 16,
+              color: AppColors.inkOn(accent, p),
+            ),
           ),
-          const SizedBox(width: AppSpacing.md),
+          const SizedBox(width: 11),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -720,39 +662,36 @@ class _TagCard extends StatelessWidget {
                   breakdown.tag.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  breakdown.summary,
                   style: TextStyle(
                     fontSize: 12.5,
-                    color: context.palette.textTertiary,
+                    height: 1.2,
+                    fontWeight: FontWeight.w700,
+                    color: p.textPrimary,
                   ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  breakdown.summary,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: monoStyle(color: p.textTertiary, size: 10),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
+          const SizedBox(width: 8),
           Text(
             '${breakdown.total}',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 16,
+              height: 1,
               fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-              color: accent,
+              letterSpacing: -0.4,
+              color: AppColors.inkOn(accent, p),
             ),
           ),
-          const SizedBox(width: 2),
-          Icon(
-            Icons.chevron_right_rounded,
-            size: 18,
-            color: context.palette.textTertiary,
-          ),
+          const SizedBox(width: 4),
+          Icon(Icons.chevron_right_rounded, size: 18, color: p.textFaint),
         ],
       ),
     );
@@ -772,7 +711,7 @@ class _TagCard extends StatelessWidget {
                 : '${breakdown.countLabel} across ${breakdown.subjectCount} '
                     'subjects · ${breakdown.summary}',
             style: TextStyle(
-              fontSize: 12.5,
+              fontSize: 12,
               height: 1.4,
               color: context.palette.textTertiary,
             ),
@@ -794,54 +733,48 @@ class _TaggedMarkRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette p = context.palette;
     final AttendanceStatus status = mark.status;
-    final Color statusColor = status.colorIn(context.palette);
     // A subject can only be missing on a hand-edited import; showing the row
     // anyway keeps the count above honest instead of silently disagreeing.
-    final String subjectName = mark.subject?.name ?? 'Deleted subject';
+    final Subject? subject = mark.subject;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: <Widget>[
-          Container(
-            width: 3,
-            height: 30,
-            decoration: BoxDecoration(
-              color: mark.subject?.color ?? context.palette.outlineSoft,
-              borderRadius: BorderRadius.circular(2),
-            ),
+          SubjectAvatar(
+            initials: subject?.initials ?? '?',
+            color: subject?.color ?? p.textFaint,
+            size: 30,
           ),
-          const SizedBox(width: AppSpacing.md),
+          const SizedBox(width: 11),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  subjectName,
+                  subject?.name ?? 'Deleted subject',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.2,
+                    fontWeight: FontWeight.w700,
+                    color: p.textPrimary,
                   ),
                 ),
+                const SizedBox(height: 3),
                 Text(
                   '${Dates.formatDayMonth(mark.record.date)} · '
                   '${Clock.format(mark.record.startMinutes, use24Hour: use24Hour)}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: context.palette.textTertiary,
-                  ),
+                  style: monoStyle(color: p.textTertiary, size: 10),
                 ),
               ],
             ),
           ),
-          Pill(
-            label: status.label,
-            icon: status.icon,
-            color: statusColor,
-          ),
+          const SizedBox(width: 8),
+          Pill(label: status.label, color: status.colorIn(p)),
         ],
       ),
     );

@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../core/app_theme.dart';
@@ -7,20 +5,6 @@ import '../domain/attendance_stats.dart';
 
 /// The colour a subject's attendance is drawn in, shared by every screen that
 /// shows a percentage so they never disagree.
-/// The same colour softened for large filled areas such as the meter bar.
-///
-/// Text and icons keep the full-strength [healthColor] because they need the
-/// contrast; a full-width slab of it reads as an alarm rather than as
-/// information. Blending toward the track keeps the bar in the same family
-/// instead of just making it translucent over whatever is behind it.
-Color healthFill(AttendanceHealth health, AppPalette palette) {
-  final Color base = healthColor(health, palette);
-  return Color.alphaBlend(
-    base.withValues(alpha: palette.isDark ? 0.78 : 0.62),
-    palette.surfaceHigher,
-  );
-}
-
 Color healthColor(AttendanceHealth health, AppPalette palette) {
   switch (health) {
     case AttendanceHealth.safe:
@@ -31,55 +15,92 @@ Color healthColor(AttendanceHealth health, AppPalette palette) {
     case AttendanceHealth.lost:
       return palette.absent;
     case AttendanceHealth.empty:
-      return palette.textTertiary;
+      return palette.textFaint;
   }
 }
 
-/// A bordered, rounded panel — the base surface used across every screen.
+/// The same colour softened for large filled areas such as the meter bar.
+///
+/// Text and icons keep the full-strength [healthColor] because they need the
+/// contrast; a full-width slab of it reads as an alarm rather than as
+/// information. Blending toward the track keeps the bar in the same family
+/// instead of just making it translucent over whatever is behind it.
+Color healthFill(AttendanceHealth health, AppPalette palette) {
+  final Color base = healthColor(health, palette);
+  return Color.alphaBlend(
+    base.withValues(alpha: palette.isDark ? 0.82 : 0.72),
+    palette.surfaceHigher,
+  );
+}
+
+/// Times, dates, room codes and counts.
+///
+/// Anything the eye scans down a column rather than reads as a sentence goes
+/// in the mono face, which is the whole reason it is bundled.
+TextStyle monoStyle({
+  required Color color,
+  double size = 10.5,
+  FontWeight weight = FontWeight.w500,
+  double height = 1,
+}) {
+  return TextStyle(
+    fontFamily: AppFonts.mono,
+    fontSize: size,
+    height: height,
+    fontWeight: weight,
+    color: color,
+  );
+}
+
+/// A rounded panel lifted off the canvas — the base surface used everywhere.
+/// Elevation is a shadow, not an outline; dark has no shadow at all, since a
+/// shadow does nothing against near-black and the lighter fill carries it.
 class SurfaceCard extends StatelessWidget {
   const SurfaceCard({
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(AppSpacing.lg),
     this.color,
-    this.borderColor,
-    this.radius = AppSpacing.radiusLg,
+    this.radius = AppSpacing.radiusMd,
     this.onTap,
     this.onLongPress,
+    this.elevated = true,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
   final Color? color;
-  final Color? borderColor;
   final double radius;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
+  /// Off for a card that already sits inside another one.
+  final bool elevated;
+
   @override
   Widget build(BuildContext context) {
+    final AppPalette p = context.palette;
     final BorderRadius shape = BorderRadius.circular(radius);
-    return Material(
-      color: color ?? context.palette.surface,
-      borderRadius: shape,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: shape,
-            border: Border.all(color: borderColor ?? context.palette.outlineSoft),
-          ),
-          padding: padding,
-          child: child,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: shape,
+        boxShadow: elevated ? p.cardElevation : const <BoxShadow>[],
+      ),
+      child: Material(
+        color: color ?? p.surface,
+        borderRadius: shape,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: Padding(padding: padding, child: child),
         ),
       ),
     );
   }
 }
 
-/// Small uppercase heading used above list groups.
+/// Small uppercase heading used above list groups on the sheet.
 class SectionHeader extends StatelessWidget {
   const SectionHeader(this.title, {super.key, this.trailing});
 
@@ -89,11 +110,7 @@ class SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(
-        left: AppSpacing.xs,
-        right: AppSpacing.xs,
-        bottom: AppSpacing.md,
-      ),
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: Row(
         children: <Widget>[
           Expanded(
@@ -101,14 +118,91 @@ class SectionHeader extends StatelessWidget {
               title.toUpperCase(),
               style: TextStyle(
                 color: context.palette.textTertiary,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.1,
+                fontSize: 10.5,
+                height: 1,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.05,
               ),
             ),
           ),
           if (trailing != null) trailing!,
         ],
+      ),
+    );
+  }
+}
+
+/// The hairline-ruled heading that separates one day from the next in a list.
+///
+/// A rule rather than a card: a day is a divider between things, not a thing
+/// itself, and boxing each one was most of what made the old week look busy.
+class DayRule extends StatelessWidget {
+  const DayRule({
+    super.key,
+    required this.label,
+    this.highlighted = false,
+    this.onAdd,
+  });
+
+  final String label;
+
+  /// Today, which is the one day worth colouring.
+  final bool highlighted;
+
+  final VoidCallback? onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppPalette p = context.palette;
+    final Color ink = highlighted ? p.accent : p.textTertiary;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 9),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: p.hairline)),
+        ),
+        child: Padding(
+          padding: EdgeInsets.only(bottom: onAdd == null ? 9 : 0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: ink,
+                    fontSize: 10.5,
+                    height: 1,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+              if (onAdd != null)
+                // The glyph stays small so the rule reads as a rule, but the
+                // target underneath it is a full 44px.
+                Semantics(
+                  button: true,
+                  label: 'Add a class on this day',
+                  child: InkResponse(
+                    onTap: onAdd,
+                    radius: 24,
+                    child: SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: Icon(
+                        Icons.add_rounded,
+                        size: 16,
+                        color: p.accent,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -131,6 +225,7 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final AppPalette p = context.palette;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
@@ -138,33 +233,34 @@ class EmptyState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Container(
-              width: 76,
-              height: 76,
+              width: 68,
+              height: 68,
               decoration: BoxDecoration(
-                color: context.palette.surfaceHigh,
-                borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-                border: Border.all(color: context.palette.outlineSoft),
+                color: p.accent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(22),
               ),
-              child: Icon(icon, size: 32, color: context.palette.textTertiary),
+              child: Icon(icon, size: 28, color: p.accent),
             ),
             const SizedBox(height: AppSpacing.lg),
             Text(
               title,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: context.palette.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.3,
+                color: p.textPrimary,
               ),
             ),
-            const SizedBox(height: AppSpacing.sm),
+            const SizedBox(height: 6),
             Text(
               message,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 14,
-                height: 1.4,
-                color: context.palette.textSecondary,
+                fontSize: 12.5,
+                height: 1.45,
+                fontWeight: FontWeight.w500,
+                color: p.textTertiary,
               ),
             ),
             if (action != null) ...<Widget>[
@@ -178,145 +274,6 @@ class EmptyState extends StatelessWidget {
   }
 }
 
-/// Circular percentage indicator with the value in the middle.
-class ProgressRing extends StatelessWidget {
-  const ProgressRing({
-    super.key,
-    required this.value,
-    required this.color,
-    this.size = 92,
-    this.strokeWidth = 9,
-    this.targetValue,
-    this.label,
-    this.caption,
-  });
-
-  /// 0..1
-  final double value;
-  final Color color;
-  final double size;
-  final double strokeWidth;
-
-  /// Draws a tick on the ring where the target sits.
-  final double? targetValue;
-
-  final String? label;
-  final String? caption;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(
-        painter: _RingPainter(
-          value: value.clamp(0.0, 1.0),
-          color: color,
-          strokeWidth: strokeWidth,
-          targetValue: targetValue,
-          // A painter has no BuildContext, so the palette is handed in and
-          // compared in shouldRepaint to catch a theme change.
-          palette: context.palette,
-        ),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Text(
-                label ?? '${(value * 100).round()}%',
-                style: TextStyle(
-                  fontSize: size * 0.25,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.8,
-                  color: context.palette.textPrimary,
-                ),
-              ),
-              if (caption != null)
-                Text(
-                  caption!,
-                  style: TextStyle(
-                    fontSize: size * 0.115,
-                    fontWeight: FontWeight.w500,
-                    color: context.palette.textTertiary,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RingPainter extends CustomPainter {
-  _RingPainter({
-    required this.value,
-    required this.color,
-    required this.strokeWidth,
-    required this.palette,
-    this.targetValue,
-  });
-
-  final double value;
-  final Color color;
-  final double strokeWidth;
-  final AppPalette palette;
-  final double? targetValue;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Offset center = Offset(size.width / 2, size.height / 2);
-    final double radius = (math.min(size.width, size.height) - strokeWidth) / 2;
-    final Rect rect = Rect.fromCircle(center: center, radius: radius);
-    const double start = -math.pi / 2;
-
-    final Paint track = Paint()
-      ..color = palette.surfaceHigher
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-    canvas.drawCircle(center, radius, track);
-
-    if (value > 0) {
-      final Paint arc = Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
-        ..strokeCap = StrokeCap.round;
-      canvas.drawArc(rect, start, 2 * math.pi * value, false, arc);
-    }
-
-    // A small notch marking where the required percentage sits.
-    final double? target = targetValue;
-    if (target != null && target > 0 && target < 1) {
-      final double angle = start + 2 * math.pi * target;
-      final Paint tick = Paint()
-        ..color = palette.textPrimary
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
-        ..strokeCap = StrokeCap.round;
-      final double inner = radius - strokeWidth / 2 - 1;
-      final double outer = radius + strokeWidth / 2 + 1;
-      canvas.drawLine(
-        center + Offset(math.cos(angle) * inner, math.sin(angle) * inner),
-        center + Offset(math.cos(angle) * outer, math.sin(angle) * outer),
-        tick,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_RingPainter old) =>
-      old.value != value ||
-      old.color != color ||
-      old.strokeWidth != strokeWidth ||
-      old.targetValue != targetValue ||
-      // Without this the ring keeps its old track colour when the theme is
-      // switched, since nothing else about the painter changes.
-      old.palette.surfaceHigher != palette.surfaceHigher ||
-      old.palette.textPrimary != palette.textPrimary;
-}
-
 /// Thin horizontal meter with an optional target marker.
 class TargetBar extends StatelessWidget {
   const TargetBar({
@@ -324,7 +281,7 @@ class TargetBar extends StatelessWidget {
     required this.value,
     required this.color,
     this.target,
-    this.height = 8,
+    this.height = 6,
   });
 
   final double value;
@@ -367,7 +324,7 @@ class TargetBar extends StatelessWidget {
                     width: 2,
                     height: height + 6,
                     decoration: BoxDecoration(
-                      color: context.palette.textSecondary,
+                      color: context.palette.textPrimary,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -380,16 +337,49 @@ class TargetBar extends StatelessWidget {
   }
 }
 
-/// Coloured monogram avatar for a subject.
+/// The rounded tinted tile carrying a subject's two-letter code. Replaces the
+/// colour spine: it carries the same colour and names the subject as well,
+/// which is what long course titles needed.
 class SubjectAvatar extends StatelessWidget {
   const SubjectAvatar({
     super.key,
     required this.initials,
     required this.color,
-    this.size = 44,
+    this.size = 36,
   });
 
   final String initials;
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppPalette p = context.palette;
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: p.isDark ? 0.2 : 0.16),
+        borderRadius: BorderRadius.circular(size * 0.32),
+      ),
+      child: Text(
+        initials,
+        style: TextStyle(
+          color: AppColors.inkOn(color, p),
+          fontSize: size * 0.31,
+          height: 1,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+/// The ring-in-a-circle that says how one class turned out, once it is marked.
+class StatusDot extends StatelessWidget {
+  const StatusDot({super.key, required this.color, this.size = 20});
+
   final Color color;
   final double size;
 
@@ -400,18 +390,13 @@ class SubjectAvatar extends StatelessWidget {
       height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(size * 0.32),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
+        color: color.withValues(alpha: 0.14),
+        shape: BoxShape.circle,
       ),
-      child: Text(
-        initials,
-        style: TextStyle(
-          color: color,
-          fontSize: size * 0.34,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.3,
-        ),
+      child: Container(
+        width: size * 0.35,
+        height: size * 0.35,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
     );
   }
@@ -434,29 +419,175 @@ class Pill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color fg = color ?? context.palette.textSecondary;
+    final Color fg = color ?? context.palette.textTertiary;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      padding: EdgeInsets.fromLTRB(icon == null ? 7 : 6, 3.5, 7, 3.5),
       decoration: BoxDecoration(
         color: background ?? fg.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           if (icon != null) ...<Widget>[
-            Icon(icon, size: 12, color: fg),
-            const SizedBox(width: 4),
+            Icon(icon, size: 11, color: fg),
+            const SizedBox(width: 3),
           ],
           Text(
-            label,
+            label.toUpperCase(),
             style: TextStyle(
               color: fg,
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
+              fontSize: 8.5,
+              height: 1,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.45,
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One row inside a [GroupedRows] card: an icon tile, a title, a mono value
+/// line, and a chevron when it leads somewhere.
+class AppRow extends StatelessWidget {
+  const AppRow({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.value,
+    this.tint,
+    this.onTap,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String title;
+
+  /// The current setting, in mono — a date, a range, a count.
+  final String? value;
+
+  /// The icon tile's colour. Defaults to the accent.
+  final Color? tint;
+
+  final VoidCallback? onTap;
+
+  /// Replaces the chevron — a switch, a value, nothing.
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppPalette p = context.palette;
+    final Color tone = tint ?? p.accent;
+    final String? sub = value;
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+        child: Row(
+          children: <Widget>[
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: tone.withValues(alpha: p.isDark ? 0.18 : 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 16, color: AppColors.inkOn(tone, p)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      height: 1.15,
+                      fontWeight: FontWeight.w700,
+                      color: p.textPrimary,
+                    ),
+                  ),
+                  if (sub != null && sub.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 4),
+                    Text(
+                      sub,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: monoStyle(color: p.textTertiary),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (trailing != null)
+              trailing!
+            else if (onTap != null)
+              Icon(Icons.chevron_right_rounded, size: 18, color: p.textFaint),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A white sheet holding a run of [AppRow]s, divided by rules inset past the
+/// icon tiles so the tiles read as one column.
+class GroupedRows extends StatelessWidget {
+  const GroupedRows({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final AppPalette p = context.palette;
+    final List<Widget> rows = <Widget>[];
+    for (int i = 0; i < children.length; i++) {
+      if (i > 0) {
+        rows.add(
+          Padding(
+            padding: const EdgeInsets.only(left: 58),
+            child: Container(height: 1, color: p.outlineSoft),
+          ),
+        );
+      }
+      rows.add(children[i]);
+    }
+
+    return SurfaceCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: rows,
+      ),
+    );
+  }
+}
+
+/// The explanatory line that belongs to the group above it.
+///
+/// It sits under its own card rather than floating between two, so it is
+/// obvious which rows it is talking about.
+class GroupNote extends StatelessWidget {
+  const GroupNote(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 9, 2, 0),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 10.5,
+          height: 1.4,
+          fontWeight: FontWeight.w400,
+          color: context.palette.textTertiary,
+        ),
       ),
     );
   }
@@ -561,7 +692,7 @@ Future<T?> showAppSheet<T>({
   return showModalBottomSheet<T>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: context.palette.surface,
+    backgroundColor: context.palette.canvas,
     builder: (BuildContext context) {
       return SafeArea(
         top: false,
@@ -583,9 +714,9 @@ Future<T?> showAppSheet<T>({
                 Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.4,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xl),

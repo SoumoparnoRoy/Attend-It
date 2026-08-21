@@ -149,7 +149,6 @@ class _GridPreview extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: context.palette.surfaceHigher,
                   borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-                  border: Border.all(color: context.palette.outlineSoft),
                 ),
                 child: Text(
                   '${i + 1}  '
@@ -222,7 +221,6 @@ class _TimeField extends StatelessWidget {
           ),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-            border: Border.all(color: context.palette.outline),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -295,9 +293,8 @@ class RoomsSection extends ConsumerWidget {
                   _RoomChip(
                     room: room,
                     onRename: () => _renameRoom(context, ref, room),
-                    onDelete: () => ref
-                        .read(actionsProvider)
-                        .deleteRoom(room.id!),
+                    onDelete: () =>
+                        ref.read(actionsProvider).deleteRoom(room.id!),
                   ),
               ],
             ),
@@ -368,7 +365,6 @@ class _RoomChip extends StatelessWidget {
           padding: const EdgeInsets.only(left: 12, top: 4, bottom: 4, right: 4),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-            border: Border.all(color: context.palette.outlineSoft),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -562,7 +558,6 @@ class _TagChip extends StatelessWidget {
           padding: const EdgeInsets.only(left: 12, top: 4, bottom: 4, right: 4),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-            border: Border.all(color: context.palette.outlineSoft),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

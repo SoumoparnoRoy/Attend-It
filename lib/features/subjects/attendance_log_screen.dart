@@ -9,6 +9,7 @@ import '../../data/settings/app_settings.dart';
 import '../../domain/attendance_log.dart';
 import '../../state/providers.dart';
 import '../../widgets/common.dart';
+import '../../widgets/gradient_header.dart';
 
 /// Every past class for one subject, with its mark, correctable in place.
 ///
@@ -25,11 +26,14 @@ class AttendanceLogScreen extends ConsumerWidget {
     if (subjectId == null) {
       // Defensive: a subject always has an id once persisted, but the model
       // allows null before insertion and a blank screen would be worse.
-      return Scaffold(
-        appBar: AppBar(title: Text(subject.name)),
-        body: const _LogEmpty(
-          message: 'This subject has not been saved yet.',
-        ),
+      return PushScaffold(
+        title: subject.name,
+        slivers: const <Widget>[
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _LogEmpty(message: 'This subject has not been saved yet.'),
+          ),
+        ],
       );
     }
 
@@ -37,87 +41,60 @@ class AttendanceLogScreen extends ConsumerWidget {
         ref.watch(attendanceLogProvider(subjectId));
     final AppSettings settings =
         ref.watch(settingsProvider).value ?? const AppSettings();
-
     final int marked =
         entries.where((AttendanceLogEntry e) => e.isMarked).length;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text(subject.name, overflow: TextOverflow.ellipsis),
-            if (entries.isNotEmpty)
-              Text(
-                '$marked of ${entries.length} marked',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w500,
-                  color: context.palette.textSecondary,
+    if (entries.isEmpty) {
+      return PushScaffold(
+        title: subject.name,
+        slivers: const <Widget>[
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _LogEmpty(
+              message: 'Once this subject has had a class, every one of them '
+                  'shows up here to mark or correct.',
+            ),
+          ),
+        ],
+      );
+    }
+
+    final List<_Row> rows = _flatten(entries);
+
+    return PushScaffold(
+      title: subject.name,
+      subtitle: '$marked of ${entries.length} marked',
+      slivers: <Widget>[
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+          sliver: SliverList.builder(
+            itemCount: rows.length,
+            itemBuilder: (BuildContext context, int index) {
+              final _Row row = rows[index];
+              if (row.isHeader) {
+                return Padding(
+                  padding: EdgeInsets.only(top: index == 0 ? 0 : 18),
+                  child: SectionHeader(row.header!),
+                );
+              }
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _LogTile(
+                  subjectId: subjectId,
+                  entry: row.entry!,
+                  use24Hour: settings.use24HourTime,
                 ),
-              ),
-          ],
+              );
+            },
+          ),
         ),
-      ),
-      body: SafeArea(
-        top: false,
-        child: entries.isEmpty
-            ? const _LogEmpty(
-                message:
-                    'Once this subject has had a class, every one of them '
-                    'shows up here to mark or correct.',
-              )
-            : _LogList(
-                subjectId: subjectId,
-                entries: entries,
-                use24Hour: settings.use24HourTime,
-              ),
-      ),
+      ],
     );
   }
-}
 
-class _LogEmpty extends StatelessWidget {
-  const _LogEmpty({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return EmptyState(
-      icon: Icons.history_rounded,
-      title: 'Nothing to show yet',
-      message: message,
-    );
-  }
-}
-
-/// A month heading or a single class, flattened so one [ListView.builder] can
-/// lazily render a whole term without building rows it never shows.
-@immutable
-class _Row {
-  const _Row.header(this.header) : entry = null;
-  const _Row.entry(this.entry) : header = null;
-
-  final String? header;
-  final AttendanceLogEntry? entry;
-
-  bool get isHeader => header != null;
-}
-
-class _LogList extends ConsumerWidget {
-  const _LogList({
-    required this.subjectId,
-    required this.entries,
-    required this.use24Hour,
-  });
-
-  final int subjectId;
-  final List<AttendanceLogEntry> entries;
-  final bool use24Hour;
-
-  List<_Row> _flatten() {
+  /// Month headings and classes flattened into one list, so a single builder
+  /// can render a whole term lazily rather than building rows it never shows.
+  List<_Row> _flatten(List<AttendanceLogEntry> entries) {
     final List<_Row> rows = <_Row>[];
     String? currentMonth;
     for (final AttendanceLogEntry entry in entries) {
@@ -130,45 +107,35 @@ class _LogList extends ConsumerWidget {
     }
     return rows;
   }
+}
+
+class _LogEmpty extends StatelessWidget {
+  const _LogEmpty({required this.message});
+
+  final String message;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final List<_Row> rows = _flatten();
-
-    return Center(
-      // Keeps line length readable on tablets and foldables rather than
-      // stretching a date and three buttons across the whole width.
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640),
-        child: ListView.builder(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            AppSpacing.sm,
-            AppSpacing.lg,
-            AppSpacing.xxl,
-          ),
-          itemCount: rows.length,
-          itemBuilder: (BuildContext context, int index) {
-            final _Row row = rows[index];
-            if (row.isHeader) {
-              return Padding(
-                padding: const EdgeInsets.only(
-                  top: AppSpacing.lg,
-                  bottom: AppSpacing.sm,
-                ),
-                child: SectionHeader(row.header!),
-              );
-            }
-            return _LogTile(
-              subjectId: subjectId,
-              entry: row.entry!,
-              use24Hour: use24Hour,
-            );
-          },
-        ),
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 40, bottom: 60),
+      child: EmptyState(
+        icon: Icons.history_rounded,
+        title: 'Nothing to show yet',
+        message: message,
       ),
     );
   }
+}
+
+@immutable
+class _Row {
+  const _Row.header(this.header) : entry = null;
+  const _Row.entry(this.entry) : header = null;
+
+  final String? header;
+  final AttendanceLogEntry? entry;
+
+  bool get isHeader => header != null;
 }
 
 class _LogTile extends ConsumerWidget {
@@ -196,113 +163,107 @@ class _LogTile extends ConsumerWidget {
             use24Hour: use24Hour,
           );
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: SurfaceCard(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.lg,
-          vertical: AppSpacing.md,
-        ),
-        // Unmarked rows are the ones worth chasing, so they carry a hint of the
-        // warning colour instead of sitting silently in the list.
-        borderColor: entry.needsMarking
-            ? p.warning.withValues(alpha: 0.35)
-            : null,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        Dates.formatFull(entry.date),
-                        style: const TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.w600,
-                        ),
+    return SurfaceCard(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      // Unmarked rows are the ones worth chasing, so they carry a hint of the
+      // warning colour instead of sitting silently in the list. With outlines
+      // gone the hint has to be in the fill.
+      color: entry.needsMarking
+          ? Color.alphaBlend(p.warning.withValues(alpha: 0.09), p.surface)
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      Dates.formatFull(entry.date),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.2,
+                        fontWeight: FontWeight.w700,
+                        color: p.textPrimary,
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        <String>[
-                          Dates.weekdayLong(entry.date),
-                          time,
-                          if (entry.room != null && entry.room!.isNotEmpty)
-                            entry.room!,
-                          if (tagName != null) '+$tagName',
-                        ].join(' · '),
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: p.textSecondary,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      <String>[
+                        Dates.weekdayLong(entry.date),
+                        time,
+                        if (entry.room != null && entry.room!.isNotEmpty)
+                          entry.room!,
+                        if (tagName != null) tagName,
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: monoStyle(color: p.textTertiary, size: 10),
+                    ),
+                  ],
+                ),
+              ),
+              for (final AttendanceStatus status in AttendanceStatus.values)
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: _StatusToggle(
+                    status: status,
+                    selected: entry.status == status,
+                    // Same reason as the Today card: the row is replaced on
+                    // write, so the tag has to be handed back or correcting
+                    // Present to Absent would quietly strip it.
+                    onTap: () => ref.read(actionsProvider).setStatusAt(
+                          subjectId: subjectId,
+                          date: entry.date,
+                          startMinutes: entry.startMinutes,
+                          current: entry.status,
+                          status: status,
+                          tagId: entry.tagId,
                         ),
-                      ),
-                    ],
                   ),
                 ),
-                for (final AttendanceStatus status in AttendanceStatus.values)
-                  Padding(
-                    padding: const EdgeInsets.only(left: AppSpacing.sm),
-                    child: _StatusToggle(
-                      status: status,
-                      selected: entry.status == status,
-                      // Same reason as the Today card: the row is replaced on
-                      // write, so the tag has to be handed back or correcting
-                      // Present to Absent would quietly strip it.
-                      onTap: () => ref.read(actionsProvider).setStatusAt(
-                            subjectId: subjectId,
-                            date: entry.date,
-                            startMinutes: entry.startMinutes,
-                            current: entry.status,
-                            status: status,
-                            tagId: entry.tagId,
-                          ),
+            ],
+          ),
+          if (entry.isOrphaned) ...<Widget>[
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Icon(Icons.link_off_rounded, size: 13, color: p.textTertiary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'The weekly class this was recorded against has been '
+                    'deleted. It still counts towards your percentage.',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      height: 1.4,
+                      color: p.textTertiary,
                     ),
                   ),
+                ),
               ],
             ),
-            if (entry.isOrphaned) ...<Widget>[
-              const SizedBox(height: AppSpacing.sm),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Icon(
-                    Icons.link_off_rounded,
-                    size: 14,
-                    color: p.textTertiary,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'The weekly class this was recorded against has been '
-                      'deleted. It still counts towards your percentage.',
-                      style: TextStyle(fontSize: 11.5, color: p.textTertiary),
-                    ),
-                  ),
-                ],
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () => _confirmRemove(context, ref),
-                  icon: const Icon(Icons.delete_outline_rounded, size: 16),
-                  label: const Text('Remove this mark'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: p.absent,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm,
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                    ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => _confirmRemove(context, ref),
+                icon: const Icon(Icons.delete_outline_rounded, size: 15),
+                label: const Text('Remove this mark'),
+                style: TextButton.styleFrom(
+                  foregroundColor: p.absent,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  textStyle: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-            ],
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -318,13 +279,12 @@ extension on _LogTile {
     final bool confirmed = await showDialog<bool>(
           context: context,
           builder: (BuildContext context) => AlertDialog(
-            backgroundColor: context.palette.surfaceHigh,
             title: const Text('Remove this mark?'),
             content: Text(
               'The ${entry.status?.label.toLowerCase() ?? 'recorded'} mark for '
               '${Dates.formatFull(entry.date)} will be deleted and will stop '
               'counting towards your percentage. This cannot be undone.',
-              style: const TextStyle(fontSize: 13.5, height: 1.4),
+              style: const TextStyle(fontSize: 13, height: 1.4),
             ),
             actions: <Widget>[
               TextButton(
@@ -378,30 +338,20 @@ class _StatusToggle extends StatelessWidget {
         selected: selected,
         label: status.label,
         child: Material(
-          color: selected ? color.withValues(alpha: 0.18) : p.surfaceHigh,
+          color: selected ? color.withValues(alpha: 0.14) : p.surfaceHigh,
           borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
           child: InkWell(
             onTap: onTap,
             borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-            child: Container(
-              // 44px keeps the target at the accessible minimum even though the
-              // icon inside is small.
+            child: SizedBox(
+              // 44px keeps the target at the accessible minimum even though
+              // the icon inside is small.
               width: 44,
               height: 44,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-                border: Border.all(
-                  color: selected
-                      ? color.withValues(alpha: 0.6)
-                      : p.outlineSoft,
-                  width: selected ? 1.6 : 1,
-                ),
-              ),
               child: Icon(
                 status.icon,
                 size: 18,
-                color: selected ? color : p.textTertiary,
+                color: selected ? color : p.textFaint,
               ),
             ),
           ),
