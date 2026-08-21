@@ -125,6 +125,15 @@ void main() {
       ]) {
         final Color sheet = theme.bottomSheetTheme.modalBackgroundColor!;
         expect(theme.inputDecorationTheme.fillColor, isNot(sheet));
+        // Same rule inside a dialog: the picker's hour and minute are fields.
+        expect(
+          WidgetStateProperty.resolveAs<Color>(
+            theme.timePickerTheme.hourMinuteColor!,
+            <WidgetState>{},
+          ),
+          isNot(theme.dialogTheme.backgroundColor),
+          reason: 'time picker field on a dialog (${theme.brightness})',
+        );
         expect(
           theme.outlinedButtonTheme.style?.backgroundColor
               ?.resolve(<WidgetState>{}),

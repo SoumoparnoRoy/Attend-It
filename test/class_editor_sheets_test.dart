@@ -124,11 +124,11 @@ Future<void> _tapButton(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
 }
 
-/// Drives the real time picker in its keyboard-entry mode.
+/// Drives the real time picker, which opens on the keyboard.
 ///
-/// The dial is not reliably tappable in a test, and the point here is the
-/// form's reaction to a chosen time rather than the picker itself. Scoped to the
-/// dialog because the sheet underneath has text fields of its own.
+/// The point here is the form's reaction to a chosen time rather than the
+/// picker itself. Scoped to the dialog because the sheet underneath has text
+/// fields of its own.
 Future<void> _pickTime(
   WidgetTester tester,
   Finder field,
@@ -136,8 +136,6 @@ Future<void> _pickTime(
   int minute,
 ) async {
   await tester.tap(field);
-  await tester.pumpAndSettle();
-  await tester.tap(find.byIcon(Icons.keyboard_outlined));
   await tester.pumpAndSettle();
 
   final Finder inputs = find.descendant(

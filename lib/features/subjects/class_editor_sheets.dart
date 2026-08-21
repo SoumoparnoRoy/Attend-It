@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/date_utils.dart';
+import '../../core/time_picker.dart';
 import '../../data/models/attendance_status.dart';
 import '../../data/models/class_category.dart';
 import '../../data/models/class_session.dart';
@@ -992,12 +993,13 @@ class _SlotFormState extends ConsumerState<_SlotForm> {
 
   Future<void> _pickTime(_ClassTime time, {required bool isStart}) async {
     final int current = isStart ? time.startMinutes : time.endMinutes;
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
+    final TimeOfDay? picked = await showAppTimePicker(
+      context,
       initialTime: TimeOfDay(
         hour: Clock.hourOf(current),
         minute: Clock.minuteOf(current),
       ),
+      use24Hour: ref.read(settingsProvider).value?.use24HourTime ?? false,
       helpText: '${kWeekdayNamesLong[time.weekday - 1]} · '
           '${isStart ? 'start time' : 'end time'}',
     );
@@ -1681,12 +1683,13 @@ class _ExtraClassFormState extends ConsumerState<_ExtraClassForm> {
 
   Future<void> _pickTime({required bool isStart}) async {
     final int current = isStart ? _start : _end;
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
+    final TimeOfDay? picked = await showAppTimePicker(
+      context,
       initialTime: TimeOfDay(
         hour: Clock.hourOf(current),
         minute: Clock.minuteOf(current),
       ),
+      use24Hour: ref.read(settingsProvider).value?.use24HourTime ?? false,
     );
     if (picked == null || !mounted) return;
     setState(() {

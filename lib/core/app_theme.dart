@@ -672,6 +672,59 @@ class AppTheme {
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         ),
       ),
+      // The picker opens on its keyboard, so the hour and minute are fields
+      // and have to look like fields: on a white dialog the Material default
+      // fill is a shade the eye cannot find, which leaves two bare numbers and
+      // their labels floating. The day period is the app's violet rather than
+      // the scheme's tertiary, which lands on teal here.
+      timePickerTheme: TimePickerThemeData(
+        backgroundColor: p.surface,
+        hourMinuteColor: WidgetStateColor.resolveWith(
+          (Set<WidgetState> states) => states.contains(WidgetState.selected)
+              ? p.accentSoft
+              : p.surfaceHigher,
+        ),
+        hourMinuteTextColor: WidgetStateColor.resolveWith(
+          (Set<WidgetState> states) => states.contains(WidgetState.selected)
+              ? p.accent
+              : p.textPrimary,
+        ),
+        hourMinuteShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          side: BorderSide(color: p.outline),
+        ),
+        // The display styles carry tight negative tracking, which throws the
+        // two numbers off centre inside their boxes.
+        hourMinuteTextStyle: const TextStyle(
+          fontFamily: AppFonts.sans,
+          fontSize: 40,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0,
+        ),
+        dayPeriodColor: WidgetStateColor.resolveWith(
+          (Set<WidgetState> states) => states.contains(WidgetState.selected)
+              ? p.accentSoft
+              : Colors.transparent,
+        ),
+        dayPeriodTextColor: WidgetStateColor.resolveWith(
+          (Set<WidgetState> states) => states.contains(WidgetState.selected)
+              ? p.accent
+              : p.textSecondary,
+        ),
+        dayPeriodBorderSide: BorderSide(color: p.outline),
+        dayPeriodShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          side: BorderSide(color: p.outline),
+        ),
+        dialHandColor: p.accent,
+        dialBackgroundColor: p.surfaceHigher,
+        helpTextStyle: TextStyle(
+          fontFamily: AppFonts.sans,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: p.textSecondary,
+        ),
+      ),
       dialogTheme: DialogThemeData(
         backgroundColor: p.surface,
         surfaceTintColor: Colors.transparent,

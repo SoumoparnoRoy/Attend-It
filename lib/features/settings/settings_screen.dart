@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/date_utils.dart';
+import '../../core/time_picker.dart';
 import '../../data/models/class_category.dart';
 import '../../data/models/holiday.dart';
 import '../../data/models/subject.dart';
@@ -549,12 +550,13 @@ class SettingsScreen extends ConsumerWidget {
     AppSettings settings,
     WidgetRef ref,
   ) async {
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
+    final TimeOfDay? picked = await showAppTimePicker(
+      context,
       initialTime: TimeOfDay(
         hour: Clock.hourOf(settings.eveningReminderMinutes),
         minute: Clock.minuteOf(settings.eveningReminderMinutes),
       ),
+      use24Hour: settings.use24HourTime,
     );
     if (picked == null) return;
     await controller.save(

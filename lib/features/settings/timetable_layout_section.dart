@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/date_utils.dart';
+import '../../core/time_picker.dart';
 import '../../data/models/room.dart';
 import '../../data/models/tag.dart';
 import '../../data/settings/app_settings.dart';
@@ -203,12 +204,13 @@ class _TimeField extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         onTap: () async {
-          final TimeOfDay? picked = await showTimePicker(
-            context: context,
+          final TimeOfDay? picked = await showAppTimePicker(
+            context,
             initialTime: TimeOfDay(
               hour: Clock.hourOf(minutes),
               minute: Clock.minuteOf(minutes),
             ),
+            use24Hour: use24Hour,
             helpText: label,
           );
           if (picked == null) return;
