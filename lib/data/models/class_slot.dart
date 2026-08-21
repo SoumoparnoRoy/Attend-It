@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../core/date_utils.dart';
+import 'attendance_record.dart';
 
 /// A recurring weekly class: "Physics, every Tuesday 09:00–10:30, from 4 Aug".
 ///
@@ -44,6 +45,13 @@ class ClassSlot {
   String get weekdayShortName => kWeekdayNamesShort[weekday - 1];
 
   /// Whether this rule can produce an occurrence on [date].
+  /// Marks carry no slot id, so ownership is the recurrence test plus the
+  /// start time that produced them.
+  bool covers(AttendanceRecord record) =>
+      record.subjectId == subjectId &&
+      record.startMinutes == startMinutes &&
+      appliesOn(record.date);
+
   bool appliesOn(DateTime date) {
     if (date.weekday != weekday) return false;
     final int key = Dates.keyOf(date);

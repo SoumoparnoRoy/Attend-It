@@ -136,6 +136,15 @@ class AppSettings {
 
   bool get hasSemester => semesterStart != null && semesterEnd != null;
 
+  /// Whether a mark on [date] counts towards this term. Inclusive at both
+  /// ends, and with no dates set there is no window, so everything counts.
+  bool countsInTerm(DateTime date) {
+    if (!hasSemester) return true;
+    final DateTime day = Dates.dayOf(date);
+    return !day.isBefore(Dates.dayOf(semesterStart!)) &&
+        !day.isAfter(Dates.dayOf(semesterEnd!));
+  }
+
   /// How far through the term you are, 0..1.
   double get semesterProgress {
     if (!hasSemester) return 0;

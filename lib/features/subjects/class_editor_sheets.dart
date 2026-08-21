@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/date_utils.dart';
+import '../../core/words.dart';
 import '../../core/time_picker.dart';
+import '../../data/models/attendance_record.dart';
 import '../../data/models/attendance_status.dart';
 import '../../data/models/class_category.dart';
 import '../../data/models/class_session.dart';
@@ -2470,6 +2472,40 @@ Future<void> showSessionEditor(
   }
 }
 
+/// The count is the part worth reading, so the dialog names it rather than
+/// asking "are you sure".
+Future<bool> _confirmDeleteWithMarks(
+  BuildContext context,
+  String subjectName,
+  int markCount,
+) async {
+  final bool? confirmed = await showDialog<bool>(
+    context: context,
+    builder: (BuildContext context) => AlertDialog(
+      title: const Text('Delete the class and its attendance?'),
+      content: Text(
+        '$subjectName loses this weekly class and the '
+        '${Words.plural(markCount, 'mark')} recorded against it. '
+        'This cannot be undone.',
+        style: const TextStyle(height: 1.4),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          style:
+              TextButton.styleFrom(foregroundColor: context.palette.absent),
+          child: const Text('Delete both'),
+        ),
+      ],
+    ),
+  );
+  return confirmed ?? false;
+}
+
 /// Long-press menu on a class: edit it, cancel just this one, stop it
 /// repeating, or remove it entirely.
 Future<void> showSessionOptions(
@@ -2477,6 +2513,16 @@ Future<void> showSessionOptions(
   WidgetRef ref,
   ClassSession session,
 ) async {
+  final TimetableData? data = ref.read(timetableProvider).value;
+  ClassSlot? slot;
+  for (final ClassSlot candidate in data?.slots ?? <ClassSlot>[]) {
+    if (candidate.id == session.slotId) slot = candidate;
+  }
+  // With nothing marked the two deletes would do the same thing.
+  final int markCount = slot == null
+      ? 0
+      : (data?.records ?? <AttendanceRecord>[]).where(slot.covers).length;
+
   await showAppSheet<void>(
     context: context,
     title: session.subject.name,
@@ -2538,6 +2584,27 @@ Future<void> showSessionOptions(
               await ref.read(actionsProvider).deleteSlot(session.slotId!);
             },
           ),
+          if (markCount > 0) ...<Widget>[
+            const SizedBox(height: AppSpacing.md),
+            _OptionTile(
+              icon: Icons.delete_forever_outlined,
+              title: 'Delete it and its attendance',
+              subtitle: 'Also removes the '
+                  '${Words.plural(markCount, 'mark')} recorded against this '
+                  'class. Your percentage will change.',
+              danger: true,
+              onTap: () async {
+                final bool confirmed = await _confirmDeleteWithMarks(
+                  context,
+                  session.subject.name,
+                  markCount,
+                );
+                if (!confirmed || !context.mounted) return;
+                Navigator.of(context).pop();
+                await ref.read(actionsProvider).deleteSlotAndMarks(slot!);
+              },
+            ),
+          ],
         ],
         if (session.extraClassId != null) ...<Widget>[
           const SizedBox(height: AppSpacing.md),

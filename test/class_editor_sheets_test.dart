@@ -5,7 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:zeolite/core/app_theme.dart';
 import 'package:zeolite/core/date_utils.dart';
 import 'package:zeolite/data/models/attendance_record.dart';
+import 'package:zeolite/data/models/attendance_status.dart';
 import 'package:zeolite/data/models/class_category.dart';
+import 'package:zeolite/data/models/class_session.dart';
 import 'package:zeolite/data/models/class_slot.dart';
 import 'package:zeolite/data/models/extra_class.dart';
 import 'package:zeolite/data/models/holiday.dart';
@@ -58,7 +60,10 @@ class _RecordingActions extends TimetableActions {
   Future<void> addExtraClass(ExtraClass extra) async => extras.add(extra);
 }
 
-TimetableData _fixture({List<ClassSlot> slots = const <ClassSlot>[]}) =>
+TimetableData _fixture({
+  List<ClassSlot> slots = const <ClassSlot>[],
+  List<AttendanceRecord> records = const <AttendanceRecord>[],
+}) =>
     TimetableData(
       categories: const <ClassCategory>[
         ClassCategory(id: 1, name: 'Lab', defaultDurationMinutes: 120),
@@ -80,18 +85,21 @@ TimetableData _fixture({List<ClassSlot> slots = const <ClassSlot>[]}) =>
       slots: slots,
       extras: <ExtraClass>[],
       holidays: const <Holiday>[],
-      records: <AttendanceRecord>[],
+      records: records,
     );
 
 Widget _host(
   Future<void> Function(BuildContext, WidgetRef) open, {
   AppSettings settings = _plainSettings,
   List<ClassSlot> slots = const <ClassSlot>[],
+  List<AttendanceRecord> records = const <AttendanceRecord>[],
   TimetableActions Function(Ref)? actions,
 }) {
   return ProviderScope(
     overrides: [
-      timetableProvider.overrideWith((Ref ref) async => _fixture(slots: slots)),
+      timetableProvider.overrideWith(
+        (Ref ref) async => _fixture(slots: slots, records: records),
+      ),
       settingsProvider.overrideWith(() => _StaticSettings(settings)),
       if (actions != null) actionsProvider.overrideWith(actions),
     ],
@@ -99,10 +107,14 @@ Widget _host(
       theme: AppTheme.dark(),
       home: Scaffold(
         body: Consumer(
-          builder: (BuildContext c, WidgetRef ref, _) => TextButton(
-            onPressed: () => open(c, ref),
-            child: const Text('open'),
-          ),
+          builder: (BuildContext c, WidgetRef ref, _) {
+            // Loaded before a sheet reads it, the way a real screen has it.
+            ref.watch(timetableProvider);
+            return TextButton(
+              onPressed: () => open(c, ref),
+              child: const Text('open'),
+            );
+          },
         ),
       ),
     ),
@@ -426,6 +438,86 @@ void main() {
       // Both would key to (Physics, this Monday, 9:00) and share one mark.
       expect(find.textContaining('share one'), findsOneWidget);
       expect(extras, isEmpty);
+    });
+  });
+
+  group('removing a class that has attendance against it', () {
+    final DateTime monday = Dates.startOfWeek(Dates.today());
+    final ClassSlot weekly = ClassSlot(
+      id: 7,
+      subjectId: 1,
+      weekday: DateTime.monday,
+      startMinutes: 9 * 60,
+      endMinutes: 10 * 60,
+      startDate: Dates.addDays(monday, -70),
+    );
+
+    ClassSession sessionOn(DateTime date) => ClassSession(
+          subject: const Subject(
+            id: 1,
+            name: 'Physics',
+            categoryId: 1,
+            colorValue: AppColors.defaultSubjectColor,
+          ),
+          date: date,
+          startMinutes: 9 * 60,
+          endMinutes: 10 * 60,
+          slotId: 7,
+        );
+
+    AttendanceRecord markOn(DateTime date, {int startMinutes = 9 * 60}) =>
+        AttendanceRecord(
+          subjectId: 1,
+          date: date,
+          startMinutes: startMinutes,
+          status: AttendanceStatus.present,
+        );
+
+    testWidgets('the destructive pair is offered', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        _host(
+          (c, ref) => showSessionOptions(c, ref, sessionOn(monday)),
+          slots: <ClassSlot>[weekly],
+          records: <AttendanceRecord>[markOn(Dates.addDays(monday, -7))],
+        ),
+      );
+      await _openSheet(tester);
+
+      expect(find.text('Delete this weekly class'), findsOneWidget);
+      expect(find.text('Delete it and its attendance'), findsOneWidget);
+      // A warning without the number is just a shrug.
+      expect(find.textContaining('1 mark'), findsOneWidget);
+    });
+
+    testWidgets('with nothing recorded there is only one delete',
+        (WidgetTester tester) async {
+      await tester.pumpWidget(
+        _host(
+          (c, ref) => showSessionOptions(c, ref, sessionOn(monday)),
+          slots: <ClassSlot>[weekly],
+        ),
+      );
+      await _openSheet(tester);
+
+      expect(find.text('Delete this weekly class'), findsOneWidget);
+      expect(find.text('Delete it and its attendance'), findsNothing);
+    });
+
+    testWidgets('a mark at another time belongs to another class',
+        (WidgetTester tester) async {
+      await tester.pumpWidget(
+        _host(
+          (c, ref) => showSessionOptions(c, ref, sessionOn(monday)),
+          slots: <ClassSlot>[weekly],
+          records: <AttendanceRecord>[
+            markOn(Dates.addDays(monday, -7), startMinutes: 14 * 60),
+            markOn(Dates.addDays(monday, -6)),
+          ],
+        ),
+      );
+      await _openSheet(tester);
+
+      expect(find.text('Delete it and its attendance'), findsNothing);
     });
   });
 }

@@ -162,12 +162,15 @@ class ScheduleEngine {
 
   /// Sessions still to come for a subject before the semester ends. Used to
   /// work out whether a target is still mathematically reachable.
+  ///
+  /// A session already marked is not one of them — a cancelled class will not
+  /// be attended, and one marked early is already in the held total.
   int remainingSessionsFor(int subjectId, {DateTime? from}) {
     if (semesterEnd == null) return 0;
     final DateTime start = Dates.addDays(from ?? Dates.today(), 1);
     if (Dates.keyOf(start) > Dates.keyOf(semesterEnd!)) return 0;
     return sessionsBetween(start, semesterEnd!)
-        .where((ClassSession s) => s.subject.id == subjectId)
+        .where((ClassSession s) => s.subject.id == subjectId && !s.isMarked)
         .length;
   }
 
@@ -180,7 +183,7 @@ class ScheduleEngine {
     if (Dates.keyOf(start) > Dates.keyOf(semesterEnd!)) return counts;
     for (final ClassSession session in sessionsBetween(start, semesterEnd!)) {
       final int? id = session.subject.id;
-      if (id == null) continue;
+      if (id == null || session.isMarked) continue;
       counts[id] = (counts[id] ?? 0) + 1;
     }
     return counts;

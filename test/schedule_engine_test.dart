@@ -286,5 +286,39 @@ void main() {
       expect(engine.remainingSessionsFor(1, from: monday), 3);
       expect(engine.remainingSessionsBySubject(from: monday)[1], 3);
     });
+
+    test('a future class already cancelled is not one still to attend', () {
+      final ScheduleEngine engine = buildEngine(
+        slots: <ClassSlot>[slotFixture(startDate: Dates.addDays(monday, -70))],
+        records: <AttendanceRecord>[
+          AttendanceRecord(
+            subjectId: 1,
+            date: Dates.addDays(monday, 7),
+            startMinutes: 9 * 60,
+            status: AttendanceStatus.cancelled,
+          ),
+        ],
+        semesterEnd: Dates.addDays(monday, 21),
+      );
+      expect(engine.remainingSessionsFor(1, from: monday), 2);
+      expect(engine.remainingSessionsBySubject(from: monday)[1], 2);
+    });
+
+    test('one marked ahead of its date is counted as held, not as remaining',
+        () {
+      final ScheduleEngine engine = buildEngine(
+        slots: <ClassSlot>[slotFixture(startDate: Dates.addDays(monday, -70))],
+        records: <AttendanceRecord>[
+          AttendanceRecord(
+            subjectId: 1,
+            date: Dates.addDays(monday, 14),
+            startMinutes: 9 * 60,
+            status: AttendanceStatus.present,
+          ),
+        ],
+        semesterEnd: Dates.addDays(monday, 21),
+      );
+      expect(engine.remainingSessionsFor(1, from: monday), 2);
+    });
   });
 }

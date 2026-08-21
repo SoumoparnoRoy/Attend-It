@@ -271,10 +271,14 @@ final statsProvider = Provider<OverallStats>((ref) {
   }
 
   // Count marks straight from the records — cheaper and more accurate than
-  // re-expanding the whole semester, since a mark survives rule edits.
+  // re-expanding the whole semester, since a mark survives rule edits. Only
+  // this term's: the header above these figures says so, and an install keeps
+  // marks from before the dates were last moved.
+  final AppSettings term = settings ?? const AppSettings();
   final Map<int, Map<AttendanceStatus, int>> counts =
       <int, Map<AttendanceStatus, int>>{};
   for (final AttendanceRecord record in data.records) {
+    if (!term.countsInTerm(record.date)) continue;
     counts.putIfAbsent(record.subjectId, () => <AttendanceStatus, int>{});
     counts[record.subjectId]![record.status] =
         (counts[record.subjectId]![record.status] ?? 0) + 1;
@@ -332,9 +336,15 @@ final subjectStatsProvider =
 final tagBreakdownsProvider = Provider<List<TagBreakdown>>((ref) {
   final TimetableData? data = ref.watch(timetableProvider).value;
   if (data == null) return const <TagBreakdown>[];
+  // The same window as the figures above it, or the two halves of Stats
+  // would report different terms.
+  final AppSettings term =
+      ref.watch(settingsProvider).value ?? const AppSettings();
   return buildTagBreakdowns(
     tags: data.tags,
-    records: data.records,
+    records: data.records
+        .where((AttendanceRecord r) => term.countsInTerm(r.date))
+        .toList(),
     subjects: data.subjects,
   );
 });
@@ -370,8 +380,9 @@ final attendanceLogProvider =
   final DateTime earliest = Dates.addDays(today, -_maxLogDays);
 
   // Start at the semester opening, but stretch back far enough to include any
-  // mark that predates it — a mark outside the term still counts, so it has to
-  // be reachable and correctable.
+  // mark that predates it. Those no longer count towards the term, which is
+  // exactly why they have to stay reachable: this is where you see one and
+  // remove it.
   DateTime from = engine.semesterStart ?? today;
   for (final AttendanceRecord record in data.records) {
     if (record.subjectId != subjectId) continue;
@@ -636,6 +647,26 @@ class TimetableActions {
   /// so they keep counting and stay reachable in the subject's attendance log,
   /// flagged as orphaned.
   Future<void> deleteSlot(int id) async {
+    await _repo.deleteSlot(id);
+    await _refresh();
+  }
+
+  /// Deletes the rule *and* the attendance recorded against it — the
+  /// destructive half of the choice offered when a class is removed. Marks are
+  /// matched by [ClassSlot.covers], having no slot id to follow.
+  Future<void> deleteSlotAndMarks(ClassSlot slot) async {
+    final int? id = slot.id;
+    if (id == null) return;
+    final List<AttendanceRecord> records =
+        _ref.read(timetableProvider).value?.records ?? <AttendanceRecord>[];
+    for (final AttendanceRecord record in records) {
+      if (!slot.covers(record)) continue;
+      await _repo.clearAttendance(
+        record.subjectId,
+        record.date,
+        record.startMinutes,
+      );
+    }
     await _repo.deleteSlot(id);
     await _refresh();
   }
