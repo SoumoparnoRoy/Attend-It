@@ -170,8 +170,13 @@ class BackupService {
         destinationFor(folderUri: folderUri, folderUsable: usable);
 
     if (destination == BackupDestination.chosenFolder) {
-      await _writeToFolder(folderUri!);
-      return true;
+      try {
+        await _writeToFolder(folderUri!);
+        return true;
+      } catch (_) {
+        // Whatever went wrong out there, a backup somewhere beats losing the
+        // day's backup entirely.
+      }
     }
 
     await exportToFile();
@@ -195,7 +200,15 @@ class BackupService {
     final String target = await _folder.resolveFolder(folderUri);
     final String json = await exportToJsonString();
     await _folder.writeJson(target, fileNameFor(DateTime.now()), json);
+    try {
+      await _pruneFolder(target);
+    } catch (_) {
+      // Failing to tidy up is not failing to back up, and throwing here would
+      // only add a duplicate through the fallback above.
+    }
+  }
 
+  Future<void> _pruneFolder(String target) async {
     final Map<String, String> ours = <String, String>{
       for (final BackupFile f in await _folder.list(target))
         if (f.name.startsWith(_filePrefix)) f.name: f.uri,
