@@ -411,9 +411,34 @@ class ZeoliteRepository {
     );
   }
 
+  Future<void> insertHolidays(List<Holiday> holidays) async {
+    if (holidays.isEmpty) return;
+    final Database db = await _db;
+    final Batch batch = db.batch();
+    for (final Holiday holiday in holidays) {
+      batch.insert(
+        'holidays',
+        holiday.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
   Future<void> deleteHoliday(int id) async {
     final Database db = await _db;
     await db.delete('holidays', where: 'id = ?', whereArgs: <Object?>[id]);
+  }
+
+  Future<void> deleteHolidays(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final Database db = await _db;
+    final String placeholders = List<String>.filled(ids.length, '?').join(', ');
+    await db.delete(
+      'holidays',
+      where: 'id IN ($placeholders)',
+      whereArgs: ids,
+    );
   }
 
   // ------------------------------------------------------------------- admin

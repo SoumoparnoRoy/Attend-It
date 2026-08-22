@@ -859,8 +859,22 @@ class TimetableActions {
     await _refresh();
   }
 
+  /// One refresh for the whole range — a two-week break would otherwise
+  /// rebuild the engine, the day lists and the stats fourteen times.
+  Future<void> addHolidays(List<Holiday> holidays) async {
+    if (holidays.isEmpty) return;
+    await _repo.insertHolidays(holidays);
+    await _refresh();
+  }
+
   Future<void> deleteHoliday(int id) async {
     await _repo.deleteHoliday(id);
+    await _refresh();
+  }
+
+  Future<void> deleteHolidays(List<int> ids) async {
+    if (ids.isEmpty) return;
+    await _repo.deleteHolidays(ids);
     await _refresh();
   }
 

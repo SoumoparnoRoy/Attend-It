@@ -672,6 +672,12 @@ class AppTheme {
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
         ),
       ),
+      // A range's in-between band defaults to secondaryContainer, so the two
+      // ends come out violet and everything between them mint.
+      datePickerTheme: DatePickerThemeData(
+        backgroundColor: p.surface,
+        rangeSelectionBackgroundColor: p.accentSoft,
+      ),
       // The picker opens on its keyboard, so the hour and minute are fields
       // and have to look like fields: on a white dialog the Material default
       // fill is a shade the eye cannot find, which leaves two bare numbers and

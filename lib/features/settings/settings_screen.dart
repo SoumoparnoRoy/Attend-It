@@ -12,6 +12,7 @@ import '../../data/models/class_category.dart';
 import '../../data/models/holiday.dart';
 import '../../data/models/subject.dart';
 import '../../data/settings/app_settings.dart';
+import '../../domain/holiday_runs.dart';
 import '../../services/backup_service.dart';
 import '../../services/notification_service.dart';
 import '../../state/providers.dart';
@@ -31,6 +32,7 @@ class SettingsScreen extends ConsumerWidget {
         ref.watch(settingsProvider).value ?? const AppSettings();
     final TimetableData? timetable = ref.watch(timetableProvider).value;
     final List<Holiday> holidays = timetable?.holidays ?? <Holiday>[];
+    final List<HolidayRun> runs = buildHolidayRuns(holidays);
     final List<ClassCategory> categories =
         timetable?.categories ?? <ClassCategory>[];
     final List<Subject> subjects = timetable?.subjects ?? <Subject>[];
@@ -383,21 +385,17 @@ class SettingsScreen extends ConsumerWidget {
                   padding: EdgeInsets.zero,
                   child: Column(
                     children: <Widget>[
-                      for (int i = 0; i < holidays.length; i++) ...<Widget>[
+                      for (int i = 0; i < runs.length; i++) ...<Widget>[
                         if (i > 0) const Divider(indent: 58),
                         _Row(
                           icon: Icons.celebration_outlined,
-                          title: holidays[i].name,
-                          value: Dates.formatFull(holidays[i].date),
+                          title: runs[i].name,
+                          value: runs[i].isSingleDay
+                              ? runs[i].dateLabel
+                              : '${runs[i].dateLabel} · ${runs[i].lengthLabel}',
                           trailing: IconButton(
-                            onPressed: () async {
-                              final int? id = holidays[i].id;
-                              if (id != null) {
-                                await ref
-                                    .read(actionsProvider)
-                                    .deleteHoliday(id);
-                              }
-                            },
+                            onPressed: () =>
+                                _deleteHolidayRun(context, ref, runs[i]),
                             icon: const Icon(Icons.close_rounded, size: 18),
                             color: context.palette.textTertiary,
                           ),
@@ -612,25 +610,31 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _addHoliday(BuildContext context, WidgetRef ref) async {
-    final DateTime? date = await showDatePicker(
+    final DateTime today = Dates.today();
+    final DateTimeRange? range = await showDateRangePicker(
       context: context,
-      initialDate: Dates.today(),
       firstDate: DateTime(DateTime.now().year - 1),
       lastDate: DateTime(DateTime.now().year + 3),
-      helpText: 'Pick the holiday date',
+      currentDate: today,
+      helpText: 'Pick the holiday dates',
+      saveText: 'Next',
     );
-    if (date == null || !context.mounted) return;
+    if (range == null || !context.mounted) return;
 
+    final int days = Dates.daysBetween(range.start, range.end) + 1;
     final String? label = await showAppSheet<String>(
       context: context,
-      title: 'Name this holiday',
+      title: days == 1 ? 'Name this holiday' : 'Name this break',
       child: SheetTextForm(
-        submitLabel: 'Add holiday',
+        submitLabel: days == 1 ? 'Add holiday' : 'Add $days days',
         hintText: 'e.g. Diwali, Founder\'s Day',
         textCapitalization: TextCapitalization.words,
         emptyFallback: 'Holiday',
         header: Text(
-          Dates.formatFull(date),
+          days == 1
+              ? Dates.formatFull(range.start)
+              : '${Dates.formatFull(range.start)} – '
+                  '${Dates.formatFull(range.end)} · $days days',
           style: TextStyle(
             fontSize: 13,
             color: context.palette.textSecondary,
@@ -640,9 +644,48 @@ class SettingsScreen extends ConsumerWidget {
     );
     if (label == null) return;
 
-    await ref
-        .read(actionsProvider)
-        .addHoliday(Holiday(date: date, name: label));
+    await ref.read(actionsProvider).addHolidays(<Holiday>[
+          for (int i = 0; i < days; i++)
+            Holiday(date: Dates.addDays(range.start, i), name: label),
+        ]);
+  }
+
+  /// A whole break going in one tap is worth naming the count for.
+  Future<void> _deleteHolidayRun(
+    BuildContext context,
+    WidgetRef ref,
+    HolidayRun run,
+  ) async {
+    if (run.ids.isEmpty) return;
+
+    if (!run.isSingleDay) {
+      final bool? confirmed = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) => AlertDialog(
+          backgroundColor: context.palette.surfaceHigh,
+          title: Text('Remove ${run.name}?'),
+          content: Text(
+            'All ${run.lengthLabel} go, and classes run on them again.',
+            style: const TextStyle(height: 1.4),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style:
+                  TextButton.styleFrom(foregroundColor: context.palette.absent),
+              child: const Text('Remove'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+
+    await ref.read(actionsProvider).deleteHolidays(run.ids);
   }
 
   /// Saves through the system dialog so the file lands outside the app's own
