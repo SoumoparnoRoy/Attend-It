@@ -15,6 +15,7 @@ import '../data/models/room.dart';
 import '../data/models/subject.dart';
 import '../data/models/tag.dart';
 import '../data/settings/app_settings.dart';
+import 'backup_folder.dart';
 
 /// Result of an import attempt.
 class ImportResult {
@@ -29,15 +30,26 @@ class ImportResult {
   final AppSettings? settings;
 }
 
+/// Where an automatic backup is written.
+enum BackupDestination {
+  /// The folder the user picked, while the grant still holds.
+  chosenFolder,
+
+  /// The app's own documents directory — the default, and the fallback.
+  appFolder,
+}
+
 /// Exports and restores everything as a single JSON document.
 ///
 /// Local-only storage is fast and private, but it means the phone is the only
 /// copy — so a one-tap backup you can paste anywhere matters.
 class BackupService {
-  BackupService(this._repo, this._settingsService);
+  BackupService(this._repo, this._settingsService, {BackupFolder? folder})
+      : _folder = folder ?? BackupFolder();
 
   final ZeoliteRepository _repo;
   final SettingsService _settingsService;
+  final BackupFolder _folder;
 
   /// v2 added class categories, v3 the saved room list and the day-grid
   /// settings, v4 attendance tags. Older backups still import: a missing key
@@ -138,23 +150,73 @@ class BackupService {
   }
 
   /// Writes one automatic backup and prunes the oldest beyond
-  /// [keepAutoBackups]. Returns the file, or null when nothing was due.
+  /// [keepAutoBackups]. False when nothing was due.
   ///
-  /// Goes to the app's own documents directory, not anywhere the user picked:
-  /// a save-dialog location is granted for that dialog only, so writing there
-  /// unattended would need a persisted URI permission the app never asks for.
-  Future<File?> runAutoBackup({
+  /// Goes to the user's chosen folder when there is one and it is still
+  /// writable, and to the app's own documents directory otherwise.
+  Future<bool> runAutoBackup({
     required bool enabled,
     required DateTime? lastAt,
+    String? folderUri,
     DateTime? nowOverride,
   }) async {
     final DateTime now = nowOverride ?? DateTime.now();
     if (!isAutoBackupDue(enabled: enabled, lastAt: lastAt, now: now)) {
-      return null;
+      return false;
     }
-    final File file = await exportToFile();
+
+    final bool usable = folderUri != null && await _folder.isUsable(folderUri);
+    final BackupDestination destination =
+        destinationFor(folderUri: folderUri, folderUsable: usable);
+
+    if (destination == BackupDestination.chosenFolder) {
+      await _writeToFolder(folderUri!);
+      return true;
+    }
+
+    await exportToFile();
     await pruneAutoBackups();
-    return file;
+    return true;
+  }
+
+  /// Where a backup goes, given a folder that may or may not still be writable.
+  ///
+  /// Pure, so the fallback can be tested without a database, a filesystem or a
+  /// device — the same reason [isAutoBackupDue] is separate from the writing.
+  static BackupDestination destinationFor({
+    required String? folderUri,
+    required bool folderUsable,
+  }) {
+    if (folderUri == null || !folderUsable) return BackupDestination.appFolder;
+    return BackupDestination.chosenFolder;
+  }
+
+  Future<void> _writeToFolder(String folderUri) async {
+    final String target = await _folder.resolveFolder(folderUri);
+    final String json = await exportToJsonString();
+    await _folder.writeJson(target, fileNameFor(DateTime.now()), json);
+
+    final Map<String, String> ours = <String, String>{
+      for (final BackupFile f in await _folder.list(target))
+        if (f.name.startsWith(_filePrefix)) f.name: f.uri,
+    };
+    for (final String name in namesToPrune(ours.keys.toList(), keepAutoBackups)) {
+      try {
+        await _folder.delete(ours[name]!);
+      } catch (_) {
+        // A file removed from under us is not worth failing a backup over.
+      }
+    }
+  }
+
+  /// Which backup filenames should go, oldest first, to leave [keep] behind.
+  ///
+  /// Pure and shared by both destinations, so the filename sort that
+  /// [fileNameFor] exists to make possible has one implementation and one test.
+  static List<String> namesToPrune(List<String> names, int keep) {
+    final List<String> sorted = <String>[...names]..sort();
+    final int excess = sorted.length - keep;
+    return excess <= 0 ? const <String>[] : sorted.take(excess).toList();
   }
 
   /// Deletes the oldest exports beyond [keepAutoBackups].
@@ -164,14 +226,16 @@ class BackupService {
   /// copy. A manual export lands wherever the user chose and is never touched.
   Future<void> pruneAutoBackups() async {
     final Directory dir = await getApplicationDocumentsDirectory();
-    final List<File> backups = <File>[
+    final Map<String, File> backups = <String, File>{
       for (final FileSystemEntity e in dir.listSync())
-        if (e is File && p.basename(e.path).startsWith(_filePrefix)) e,
-    ]..sort((File a, File b) => p.basename(a.path).compareTo(p.basename(b.path)));
+        if (e is File && p.basename(e.path).startsWith(_filePrefix))
+          p.basename(e.path): e,
+    };
 
-    for (int i = 0; i < backups.length - keepAutoBackups; i++) {
+    for (final String name
+        in namesToPrune(backups.keys.toList(), keepAutoBackups)) {
       try {
-        backups[i].deleteSync();
+        backups[name]!.deleteSync();
       } catch (_) {
         // A file the OS has locked or the user deleted underneath us is not
         // worth failing a backup over; the next run tries again.
@@ -360,7 +424,15 @@ class BackupService {
       AppSettings? settings;
       final Object? rawSettings = data['settings'];
       if (rawSettings is Map) {
-        settings = AppSettings.fromJson(Map<String, Object?>.from(rawSettings));
+        // The backup folder is this device's, not the file's — it is left out
+        // of the export on purpose, so restoring must carry the current one
+        // forward rather than read its absence as "no folder chosen".
+        final AppSettings current = await _settingsService.load();
+        settings = AppSettings.fromJson(Map<String, Object?>.from(rawSettings))
+            .copyWith(
+          backupFolderUri: current.backupFolderUri,
+          backupFolderName: current.backupFolderName,
+        );
         await _settingsService.save(settings);
       }
 

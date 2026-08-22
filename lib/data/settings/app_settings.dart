@@ -52,6 +52,8 @@ class AppSettings {
     this.notifyAttendanceDanger = true,
     this.autoBackupEnabled = false,
     this.lastAutoBackupAt,
+    this.backupFolderUri,
+    this.backupFolderName,
     this.onboarded = false,
   });
 
@@ -112,7 +114,18 @@ class AppSettings {
   /// another phone would tell that phone a backup had already been taken.
   final DateTime? lastAutoBackupAt;
 
+  /// A persisted SAF tree URI; null means the app's own folder. Out of the
+  /// export like [lastAutoBackupAt], and for a sharper reason: a grant belongs
+  /// to this install, so restoring one elsewhere points at an unwritable
+  /// folder.
+  final String? backupFolderUri;
+
+  /// Stored so the Settings row draws without a platform call per build.
+  final String? backupFolderName;
+
   final bool onboarded;
+
+  bool get hasBackupFolder => backupFolderUri != null;
 
   double get targetRatio => targetPercent / 100.0;
 
@@ -179,6 +192,9 @@ class AppSettings {
     bool? notifyAttendanceDanger,
     bool? autoBackupEnabled,
     DateTime? lastAutoBackupAt,
+    String? backupFolderUri,
+    String? backupFolderName,
+    bool clearBackupFolder = false,
     bool? onboarded,
   }) {
     return AppSettings(
@@ -204,6 +220,12 @@ class AppSettings {
           notifyAttendanceDanger ?? this.notifyAttendanceDanger,
       autoBackupEnabled: autoBackupEnabled ?? this.autoBackupEnabled,
       lastAutoBackupAt: lastAutoBackupAt ?? this.lastAutoBackupAt,
+      // Choosing a folder and clearing one both have to be expressible, and
+      // `?? this` cannot say "set this back to null".
+      backupFolderUri:
+          clearBackupFolder ? null : backupFolderUri ?? this.backupFolderUri,
+      backupFolderName:
+          clearBackupFolder ? null : backupFolderName ?? this.backupFolderName,
       onboarded: onboarded ?? this.onboarded,
     );
   }
@@ -282,6 +304,8 @@ class SettingsService {
   static const String _kNotifyDanger = 'ut.notifyAttendanceDanger';
   static const String _kAutoBackup = 'ut.autoBackup';
   static const String _kLastAutoBackup = 'ut.lastAutoBackup';
+  static const String _kBackupFolderUri = 'ut.backupFolderUri';
+  static const String _kBackupFolderName = 'ut.backupFolderName';
   static const String _kOnboarded = 'ut.onboarded';
 
   /// The modern, cache-free preferences API. `SharedPreferences.getInstance()`
@@ -316,6 +340,8 @@ class SettingsService {
         final int ms => DateTime.fromMillisecondsSinceEpoch(ms),
         null => null,
       },
+      backupFolderUri: await prefs.getString(_kBackupFolderUri),
+      backupFolderName: await prefs.getString(_kBackupFolderName),
       onboarded: await prefs.getBool(_kOnboarded) ?? false,
     );
   }
@@ -359,6 +385,16 @@ class SettingsService {
       await prefs.setInt(
         _kLastAutoBackup,
         settings.lastAutoBackupAt!.millisecondsSinceEpoch,
+      );
+    }
+    if (settings.backupFolderUri == null) {
+      await prefs.remove(_kBackupFolderUri);
+      await prefs.remove(_kBackupFolderName);
+    } else {
+      await prefs.setString(_kBackupFolderUri, settings.backupFolderUri!);
+      await prefs.setString(
+        _kBackupFolderName,
+        settings.backupFolderName ?? '',
       );
     }
     await prefs.setBool(_kOnboarded, settings.onboarded);

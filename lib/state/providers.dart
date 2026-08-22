@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,6 +19,7 @@ import '../domain/attendance_stats.dart';
 import '../domain/day_grid.dart';
 import '../domain/schedule_engine.dart';
 import '../domain/tag_stats.dart';
+import '../services/backup_folder.dart';
 import '../services/backup_service.dart';
 import '../services/notification_service.dart';
 
@@ -33,6 +32,15 @@ final repositoryProvider = Provider<ZeoliteRepository>(
 final settingsServiceProvider = Provider<SettingsService>(
   (ref) => SettingsService(),
 );
+
+/// Whether the chosen backup folder can still be written to. Asked when
+/// Settings draws rather than remembered, since the grant can go while the app
+/// is not looking.
+final backupFolderUsableProvider = FutureProvider<bool>((ref) async {
+  final String? uri = ref.watch(settingsProvider).value?.backupFolderUri;
+  if (uri == null) return false;
+  return BackupFolder().isUsable(uri);
+});
 
 final backupServiceProvider = Provider<BackupService>(
   (ref) => BackupService(
@@ -66,6 +74,18 @@ class SettingsController extends AsyncNotifier<AppSettings> {
         onboarded: true,
       ),
     );
+  }
+
+  Future<void> setBackupFolder(String uri, String name) async {
+    final AppSettings? current = state.value;
+    if (current == null) return;
+    await save(current.copyWith(backupFolderUri: uri, backupFolderName: name));
+  }
+
+  Future<void> clearBackupFolder() async {
+    final AppSettings? current = state.value;
+    if (current == null) return;
+    await save(current.copyWith(clearBackupFolder: true));
   }
 
   Future<void> setTarget(double percent) async {
@@ -548,12 +568,13 @@ class TimetableActions {
 
     _autoBackupRunning = true;
     try {
-      final File? written =
+      final bool written =
           await _ref.read(backupServiceProvider).runAutoBackup(
                 enabled: settings.autoBackupEnabled,
                 lastAt: settings.lastAutoBackupAt,
+                folderUri: settings.backupFolderUri,
               );
-      if (written == null) return;
+      if (!written) return;
       await _ref
           .read(settingsProvider.notifier)
           .save(settings.copyWith(lastAutoBackupAt: DateTime.now()));

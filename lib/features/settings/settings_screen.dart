@@ -13,6 +13,7 @@ import '../../data/models/holiday.dart';
 import '../../data/models/subject.dart';
 import '../../data/settings/app_settings.dart';
 import '../../domain/holiday_runs.dart';
+import '../../services/backup_folder.dart';
 import '../../services/backup_service.dart';
 import '../../services/notification_service.dart';
 import '../../state/providers.dart';
@@ -33,6 +34,8 @@ class SettingsScreen extends ConsumerWidget {
     final TimetableData? timetable = ref.watch(timetableProvider).value;
     final List<Holiday> holidays = timetable?.holidays ?? <Holiday>[];
     final List<HolidayRun> runs = buildHolidayRuns(holidays);
+    final bool folderUsable =
+        ref.watch(backupFolderUsableProvider).value ?? false;
     final List<ClassCategory> categories =
         timetable?.categories ?? <ClassCategory>[];
     final List<Subject> subjects = timetable?.subjects ?? <Subject>[];
@@ -450,6 +453,21 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                     const Divider(indent: 58),
                     _Row(
+                      icon: Icons.folder_outlined,
+                      title: 'Backup folder',
+                      value: _backupFolderLine(settings, folderUsable),
+                      onTap: () => _pickBackupFolder(context, ref),
+                      trailing: settings.hasBackupFolder
+                          ? IconButton(
+                              onPressed: () =>
+                                  _clearBackupFolder(context, ref, settings),
+                              icon: const Icon(Icons.close_rounded, size: 18),
+                              color: context.palette.textTertiary,
+                            )
+                          : null,
+                    ),
+                    const Divider(indent: 58),
+                    _Row(
                       icon: Icons.delete_forever_outlined,
                       title: 'Reset everything',
                       value: 'Delete all subjects and history',
@@ -607,6 +625,68 @@ class SettingsScreen extends ConsumerWidget {
 
     if (confirmed != true) return;
     await ref.read(actionsProvider).deleteCategory(id);
+  }
+
+  /// The unavailable case is not silent: a backup still happens, and this row
+  /// is where the user finds out where it went.
+  static String _backupFolderLine(AppSettings settings, bool usable) {
+    if (!settings.hasBackupFolder) {
+      return "App's own folder — removed with the app";
+    }
+    final String name = settings.backupFolderName?.isNotEmpty ?? false
+        ? settings.backupFolderName!
+        : 'Chosen folder';
+    return usable
+        ? '$name/${BackupFolder.folderName}'
+        : "$name is unavailable — using the app's own folder";
+  }
+
+  Future<void> _pickBackupFolder(BuildContext context, WidgetRef ref) async {
+    try {
+      final BackupFolder folder = BackupFolder();
+      final BackupFile? picked = await folder.choose();
+      if (picked == null) return;
+      // Created now, not at the first backup, so a grant that cannot write
+      // fails in front of the user rather than days later.
+      await folder.resolveFolder(picked.uri);
+      await ref
+          .read(settingsProvider.notifier)
+          .setBackupFolder(picked.uri, picked.name);
+      ref.invalidate(backupFolderUsableProvider);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Automatic backups go to ${picked.name} from now on.'),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not use that folder.')),
+      );
+    }
+  }
+
+  Future<void> _clearBackupFolder(
+    BuildContext context,
+    WidgetRef ref,
+    AppSettings settings,
+  ) async {
+    final String? uri = settings.backupFolderUri;
+    if (uri != null) {
+      try {
+        await BackupFolder().release(uri);
+      } catch (_) {
+      }
+    }
+    await ref.read(settingsProvider.notifier).clearBackupFolder();
+    ref.invalidate(backupFolderUsableProvider);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Automatic backups go to the app's own folder again."),
+      ),
+    );
   }
 
   Future<void> _addHoliday(BuildContext context, WidgetRef ref) async {
